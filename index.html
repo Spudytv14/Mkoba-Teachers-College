@@ -1,20 +1,2898 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#172b4d">
-  <meta name="description" content="Mkoba Teachers College digital learning portal for students, teachers and administrators.">
-  <title>Mkoba Teachers e-Portal</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div id="app"><div class="boot"><div class="brand-mark">M</div><p>Opening Mkoba Teachers e-Portal…</p></div></div>
-  <div id="toast-region" class="toast-region" aria-live="polite"></div>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js"></script>
-</body>
-</html>
+import React, { useState, useEffect, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  addDoc, 
+  updateDoc, 
+  onSnapshot 
+} from 'firebase/firestore';
+import { 
+  GraduationCap, BookOpen, FileText, Award, Calendar, DollarSign, 
+  MessageSquare, CheckSquare, Users, Shield, LogOut, Plus, Upload, 
+  Download, CheckCircle, AlertCircle, Send, UserCheck, 
+  Bell, Menu, X, ArrowUpRight, Layers, CreditCard, Building,
+  Sliders, Check, Terminal, Hash, MapPin, Clock, FileCheck, Eye
+} from 'lucide-react';
+
+// ============================================================================
+// FIREBASE INITIALIZATION
+// ============================================================================
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+  ? JSON.parse(__firebase_config) 
+  : {};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'mkoba-teachers-portal';
+
+// ============================================================================
+// INSTITUTIONAL MODULES & CONCRETE GWERU CAMPUS DATA (NO EMOJIS, NO M-DASHES)
+// ============================================================================
+const INITIAL_MODULES = [
+  { code: 'PRO-401', name: 'Professional Studies & Heritage Curriculum', department: 'Professional Studies', lecturer: 'Dr. Taurai Moyo', credits: 18 },
+  { code: 'ECD-202', name: 'Play & Early Learning Methodology', department: 'Early Childhood Development', lecturer: 'Mrs. Rudo Sibanda', credits: 15 },
+  { code: 'TP-300', name: 'Teaching Practice & Attachment', department: 'Teaching Practice Office', lecturer: 'Dr. Taurai Moyo', credits: 30 },
+  { code: 'ICT-104', name: 'Pedagogical Media & Digital Systems', department: 'Primary Education', lecturer: 'Mr. Kudzai Ncube', credits: 12 },
+  { code: 'SCI-208', name: 'Applied Science Laboratory Didactics', department: 'Secondary Science', lecturer: 'Mr. Phillip Dube', credits: 15 }
+];
+
+const SEED_USERS = [
+  {
+    id: 'student_demo_1',
+    fullName: 'Tendai Chikwanha',
+    email: 't.chikwanha@mkobateachers.ac.zw',
+    role: 'student',
+    regNumber: 'MTC/2026/0842',
+    department: 'Primary Education',
+    intake: 'Diploma Intake 24 (Year 2)',
+    tpSchool: 'Mkoba 6 High School, Gweru',
+    feeBalanceUSD: 90,
+    totalFeesUSD: 450,
+    zigRate: 26.5,
+    examCleared: true,
+    verified: true
+  },
+  {
+    id: 'student_demo_2',
+    fullName: 'Rudo Mutasa',
+    email: 'r.mutasa@mkobateachers.ac.zw',
+    role: 'student',
+    regNumber: 'MTC/2026/0915',
+    department: 'Early Childhood Development',
+    intake: 'Diploma Intake 24 (Year 2)',
+    tpSchool: 'St. Pauls Primary, Mkoba 1',
+    feeBalanceUSD: 280,
+    totalFeesUSD: 450,
+    zigRate: 26.5,
+    examCleared: false,
+    verified: true
+  },
+  {
+    id: 'teacher_demo_1',
+    fullName: 'Dr. Taurai Moyo',
+    email: 't.moyo@mkobateachers.ac.zw',
+    role: 'teacher',
+    regNumber: 'STAFF/MTC/108',
+    department: 'Professional Studies',
+    intake: 'Principal Lecturer (Office B12)',
+    tpSchool: 'Gweru Urban Supervision Cluster',
+    verified: true
+  },
+  {
+    id: 'admin_demo_1',
+    fullName: 'Mrs. Chipo Gumbo',
+    email: 'registrar@mkobateachers.ac.zw',
+    role: 'admin',
+    regNumber: 'ADMIN/MTC/001',
+    department: 'Academic Registry & Bursary',
+    intake: 'Chief Registrar',
+    tpSchool: 'Main Administration Block',
+    verified: true
+  }
+];
+
+const SEED_MATERIALS = [
+  {
+    title: 'PRO-401: Syllabus Docket & Scheme-Cum-Plan Standard',
+    moduleCode: 'PRO-401',
+    type: 'SYLLABUS DOCKET',
+    description: 'Mandatory formatting rules for Heritage-Based Education 5.0 lesson schemes required by the Department of Teacher Education (UZ).',
+    uploadedBy: 'Dr. Taurai Moyo',
+    date: '05 Oct 2026',
+    fileSize: '2.4 MB',
+    refCode: 'DOC-MTC-401A'
+  },
+  {
+    title: 'TP-300: Supervision Assessment Instrument (Form TP-7)',
+    moduleCode: 'TP-300',
+    type: 'ASSESSMENT RUBRIC',
+    description: 'Grading sheet used by visiting Mkoba lecturers during Term 3 school visits across Midlands Province.',
+    uploadedBy: 'Dr. Taurai Moyo',
+    date: '09 Oct 2026',
+    fileSize: '1.1 MB',
+    refCode: 'DOC-MTC-300B'
+  },
+  {
+    title: 'ECD-202: 2025 External Examination Paper & Marking Key',
+    moduleCode: 'ECD-202',
+    type: 'PAST EXAM PAPER',
+    description: 'University of Zimbabwe Associateship moderation examination paper from November 2025 sitting.',
+    uploadedBy: 'Mrs. Rudo Sibanda',
+    date: '12 Oct 2026',
+    fileSize: '890 KB',
+    refCode: 'DOC-MTC-202C'
+  },
+  {
+    title: 'SCI-208: Improvised Apparatus Manual for Rural Laboratories',
+    moduleCode: 'SCI-208',
+    type: 'LAB MANUAL',
+    description: 'Technical instructions for constructing low-cost titration and optics equipment in off-grid secondary schools.',
+    uploadedBy: 'Mr. Phillip Dube',
+    date: '15 Oct 2026',
+    fileSize: '3.6 MB',
+    refCode: 'DOC-MTC-208D'
+  }
+];
+
+const SEED_ASSIGNMENTS = [
+  {
+    title: 'Coursework Paper 1: Analysis of Syllabus Interpretation in Gweru Schools',
+    moduleCode: 'PRO-401',
+    dueDate: '2026-10-30',
+    totalMarks: 100,
+    instructions: 'Submit a 2,000-word empirical report comparing scheme-cum-plan execution in two Gweru urban primary schools. Cite Ministry Circular No. 3 of 2025.',
+    createdBy: 'Dr. Taurai Moyo',
+    docketNo: 'CW-2026-01'
+  },
+  {
+    title: 'TP-300: Term 3 Teaching Practice Logbook & 10 Evaluated Lesson Plans',
+    moduleCode: 'TP-300',
+    dueDate: '2026-11-06',
+    totalMarks: 100,
+    instructions: 'Upload scanned copies of Headmaster stamped lesson observations from your Mkoba 6 High School or St. Pauls Primary placement.',
+    createdBy: 'Dr. Taurai Moyo',
+    docketNo: 'CW-2026-02'
+  },
+  {
+    title: 'ECD-202: Indigenous Play Apparatus Portfolio',
+    moduleCode: 'ECD-202',
+    dueDate: '2026-11-14',
+    totalMarks: 100,
+    instructions: 'Document five physical learning aids constructed from local Midlands timber and clay materials with child safety checklists.',
+    createdBy: 'Mrs. Rudo Sibanda',
+    docketNo: 'CW-2026-03'
+  }
+];
+
+const SEED_SUBMISSIONS = [
+  {
+    assignmentTitle: 'Coursework Paper 1: Analysis of Syllabus Interpretation in Gweru Schools',
+    moduleCode: 'PRO-401',
+    studentReg: 'MTC/2026/0842',
+    studentName: 'Tendai Chikwanha',
+    submittedAt: '14 Oct 2026',
+    submissionText: 'Empirical audit completed at Mkoba 6 High School and Bata Primary. File repository: repo.mkobateachers.ac.zw/0842_pro401.pdf',
+    status: 'GRADED',
+    caMark: 78,
+    examMark: 74,
+    feedback: 'Rigorous citation of Ministry circulars. Section 4 tabular data is well structured.'
+  },
+  {
+    assignmentTitle: 'TP-300: Term 3 Teaching Practice Logbook & 10 Evaluated Lesson Plans',
+    moduleCode: 'TP-300',
+    studentReg: 'MTC/2026/0842',
+    studentName: 'Tendai Chikwanha',
+    submittedAt: '16 Oct 2026',
+    submissionText: '10 stamped lesson evaluations from Mkoba 6 High School Head of Department attached. Ref: TP/MK6/0842.',
+    status: 'GRADED',
+    caMark: 84,
+    examMark: 80,
+    feedback: 'Commendable classroom management record verified during supervision visit.'
+  },
+  {
+    assignmentTitle: 'Coursework Paper 1: Analysis of Syllabus Interpretation in Gweru Schools',
+    moduleCode: 'PRO-401',
+    studentReg: 'MTC/2026/0915',
+    studentName: 'Rudo Mutasa',
+    submittedAt: '16 Oct 2026',
+    submissionText: 'Field study conducted at St. Pauls Primary School in Mkoba 1. Archive ID: 0915-PRO401.',
+    status: 'GRADED',
+    caMark: 66,
+    examMark: 69,
+    feedback: 'Solid field data. Include scheme-cum-plan appendix in final bound copy.'
+  }
+];
+
+const SEED_TIMETABLE = [
+  { day: 'MONDAY', time: '08:00 - 10:00', moduleCode: 'PRO-401', venue: 'Main Lecture Theatre (MLT)', lecturer: 'Dr. Taurai Moyo', group: 'Diploma Intake 24' },
+  { day: 'MONDAY', time: '10:30 - 12:30', moduleCode: 'ICT-104', venue: 'Computer Lab B1', lecturer: 'Mr. Kudzai Ncube', group: 'Primary & ECD' },
+  { day: 'TUESDAY', time: '08:00 - 10:00', moduleCode: 'ECD-202', venue: 'Batanai Hall', lecturer: 'Mrs. Rudo Sibanda', group: 'ECD Cohort' },
+  { day: 'WEDNESDAY', time: '14:00 - 16:00', moduleCode: 'TP-300', venue: 'Micro-Teaching Clinic 2', lecturer: 'Dr. Taurai Moyo', group: 'Attachment Candidates' },
+  { day: 'THURSDAY', time: '09:00 - 11:00', moduleCode: 'SCI-208', venue: 'Science Lab B2', lecturer: 'Mr. Phillip Dube', group: 'Secondary Science' },
+  { day: 'FRIDAY', time: '08:00 - 11:00', moduleCode: 'TP-300', venue: 'Mkoba 6 High School TP Placement', lecturer: 'Supervision Panel', group: 'Field Assessment' }
+];
+
+const SEED_ANNOUNCEMENTS = [
+  {
+    title: 'Term 3 Teaching Practice Supervision Deployment: Gweru & Shurugwi',
+    category: 'TEACHING PRACTICE',
+    author: 'Dr. Taurai Moyo (TP Coordinator)',
+    date: '17 Oct 2026',
+    priority: 'URGENT',
+    refNo: 'CIRCULAR/MTC/2026/19',
+    body: 'Supervision teams depart from Main Administration Block at 07:15 hrs on Monday 19 October 2026. Candidates placed at Mkoba 6 High School, St. Pauls Primary, and Chikwingwizha must have bound scheme books at the school reception.'
+  },
+  {
+    title: 'November 2026 UZ Associateship Examination Clearance Cutoff',
+    category: 'BURSARY & REGISTRY',
+    author: 'Mrs. Chipo Gumbo (Bursar)',
+    date: '15 Oct 2026',
+    priority: 'MANDATORY',
+    refNo: 'BURSARY/MTC/2026/44',
+    body: 'Candidates must clear at least 80% of the $450.00 USD semester fee (or ZiG equivalent at 1 USD = 26.50 ZiG via CBZ or ZB Bank) to generate a valid Examination Clearance Docket.'
+  },
+  {
+    title: 'Submission of Bound Coursework Dockets at Batanai Hall',
+    category: 'ACADEMIC REGISTRY',
+    author: 'Academic Registry Office',
+    date: '12 Oct 2026',
+    priority: 'STANDARD',
+    refNo: 'REG/MTC/2026/08',
+    body: 'External moderators from the University of Zimbabwe Centre for Teacher Education arrive on 02 November 2026. All PRO-401 and ECD-202 portfolios must be logged in the portal prior to physical submission.'
+  }
+];
+
+const SEED_ATTENDANCE = [
+  { date: '2026-10-12', moduleCode: 'PRO-401', venue: 'Main Lecture Theatre (MLT)', studentReg: 'MTC/2026/0842', studentName: 'Tendai Chikwanha', status: 'PRESENT', recordedBy: 'Dr. Taurai Moyo' },
+  { date: '2026-10-13', moduleCode: 'ICT-104', venue: 'Computer Lab B1', studentReg: 'MTC/2026/0842', studentName: 'Tendai Chikwanha', status: 'PRESENT', recordedBy: 'Mr. Kudzai Ncube' },
+  { date: '2026-10-14', moduleCode: 'TP-300', venue: 'Micro-Teaching Clinic 2', studentReg: 'MTC/2026/0842', studentName: 'Tendai Chikwanha', status: 'LATE', recordedBy: 'Dr. Taurai Moyo' },
+  { date: '2026-10-16', moduleCode: 'TP-300', venue: 'Mkoba 6 High School TP Placement', studentReg: 'MTC/2026/0842', studentName: 'Tendai Chikwanha', status: 'PRESENT', recordedBy: 'Dr. Taurai Moyo' },
+  { date: '2026-10-17', moduleCode: 'PRO-401', venue: 'Main Lecture Theatre (MLT)', studentReg: 'MTC/2026/0842', studentName: 'Tendai Chikwanha', status: 'PRESENT', recordedBy: 'Dr. Taurai Moyo' },
+  { date: '2026-10-12', moduleCode: 'PRO-401', venue: 'Main Lecture Theatre (MLT)', studentReg: 'MTC/2026/0915', studentName: 'Rudo Mutasa', status: 'PRESENT', recordedBy: 'Dr. Taurai Moyo' },
+  { date: '2026-10-16', moduleCode: 'ECD-202', venue: 'Batanai Hall', studentReg: 'MTC/2026/0915', studentName: 'Rudo Mutasa', status: 'ABSENT', recordedBy: 'Mrs. Rudo Sibanda' }
+];
+
+const SEED_PAYMENTS = [
+  {
+    studentReg: 'MTC/2026/0842',
+    studentName: 'Tendai Chikwanha',
+    amountUSD: 250,
+    amountZiG: 6625,
+    currencyUsed: 'ZB Bank Gweru Branch (USD Cash Deposit)',
+    reference: 'ZB-GWR-884920',
+    date: '04 Sep 2026',
+    status: 'VERIFIED'
+  },
+  {
+    studentReg: 'MTC/2026/0842',
+    studentName: 'Tendai Chikwanha',
+    amountUSD: 110,
+    amountZiG: 2915,
+    currencyUsed: 'CBZ Bank Transfer (ZiG Interbank Equivalent)',
+    reference: 'CBZ-MTC-194022',
+    date: '11 Oct 2026',
+    status: 'VERIFIED'
+  },
+  {
+    studentReg: 'MTC/2026/0915',
+    studentName: 'Rudo Mutasa',
+    amountUSD: 170,
+    amountZiG: 4505,
+    currencyUsed: 'ZB Bank Gweru Branch (USD Deposit)',
+    reference: 'ZB-GWR-772109',
+    date: '19 Sep 2026',
+    status: 'VERIFIED'
+  }
+];
+
+const SEED_MESSAGES = [
+  {
+    senderName: 'Tendai Chikwanha',
+    senderRole: 'student',
+    senderReg: 'MTC/2026/0842',
+    recipientRole: 'teacher',
+    recipientName: 'Dr. Taurai Moyo',
+    moduleCode: 'TP-300',
+    subject: 'Supervision Slot Confirmation at Mkoba 6 High School',
+    text: 'Good morning Dr. Moyo. The Headmaster at Mkoba 6 High School requested confirmation of whether the Form 3 History observation is set for Period 3 (09:20 hrs) on Monday 19 October 2026.',
+    timestamp: '17 Oct 2026, 08:40',
+    reply: 'Confirmed, Tendai. I will arrive at Mkoba 6 High School main office at 09:00 hrs. Ensure your Form TP-7 assessment sheet is inserted at the front of your scheme file.'
+  },
+  {
+    senderName: 'Rudo Mutasa',
+    senderRole: 'student',
+    senderReg: 'MTC/2026/0915',
+    recipientRole: 'teacher',
+    recipientName: 'Mrs. Rudo Sibanda',
+    moduleCode: 'ECD-202',
+    subject: 'Inspection of Clay & Timber Play Apparatus at Batanai Hall',
+    text: 'Good day Madam. May I bring my physical ECD-202 apparatus models to Storage Room 4 in Batanai Hall this afternoon for pre-moderation stamping?',
+    timestamp: '17 Oct 2026, 10:15',
+    reply: ''
+  }
+];
+
+// ============================================================================
+// MAIN APPLICATION COMPONENT
+// ============================================================================
+export default function App() {
+  const [fbUser, setFbUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [currentUserProfile, setCurrentUserProfile] = useState(SEED_USERS[0]);
+  const [isAuthenticatedView, setIsAuthenticatedView] = useState(true);
+  const [authMode, setAuthMode] = useState('login');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showDesignSpec, setShowDesignSpec] = useState(false);
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  // Utilitarian Status Banner (No browser alerts)
+  const [toast, setToast] = useState(null);
+  const showNotification = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  // Firestore Collections
+  const [usersList, setUsersList] = useState([]);
+  const [materials, setMaterials] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
+  const [timetable, setTimetable] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [attendance, setAttendance] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [seedingStatus, setSeedingStatus] = useState(false);
+
+  // Registration Form State
+  const [regForm, setRegForm] = useState({
+    fullName: '',
+    email: '',
+    password: '',
+    role: 'student',
+    regNumber: 'MTC/2026/0988',
+    department: 'Primary Education',
+    tpSchool: 'Mkoba 6 High School, Gweru'
+  });
+
+  // ============================================================================
+  // 1. FIREBASE AUTH INITIALIZATION (RULE 3)
+  // ============================================================================
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error('Auth error:', err);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setFbUser(user);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // ============================================================================
+  // 2. FIRESTORE LISTENERS & SEEDING (RULES 1, 2, 3)
+  // ============================================================================
+  useEffect(() => {
+    if (!fbUser) return;
+
+    const getColRef = (colName) => collection(db, 'artifacts', appId, 'public', 'data', colName);
+
+    const unsubUsers = onSnapshot(getColRef('mtc_users_v2'), (snap) => {
+      const data = snap.docs.map(d => ({ docId: d.id, ...d.data() }));
+      setUsersList(data);
+      if (data.length === 0 && !seedingStatus) {
+        seedInitialCollegeData();
+      }
+    }, (err) => console.error('Users listener error:', err));
+
+    const unsubMaterials = onSnapshot(getColRef('mtc_materials_v2'), (snap) => {
+      setMaterials(snap.docs.map(d => ({ docId: d.id, ...d.data() })));
+    }, (err) => console.error('Materials error:', err));
+
+    const unsubAssignments = onSnapshot(getColRef('mtc_assignments_v2'), (snap) => {
+      setAssignments(snap.docs.map(d => ({ docId: d.id, ...d.data() })));
+    }, (err) => console.error('Assignments error:', err));
+
+    const unsubSubmissions = onSnapshot(getColRef('mtc_submissions_v2'), (snap) => {
+      setSubmissions(snap.docs.map(d => ({ docId: d.id, ...d.data() })));
+    }, (err) => console.error('Submissions error:', err));
+
+    const unsubTimetable = onSnapshot(getColRef('mtc_timetable_v2'), (snap) => {
+      setTimetable(snap.docs.map(d => ({ docId: d.id, ...d.data() })));
+    }, (err) => console.error('Timetable error:', err));
+
+    const unsubAnnouncements = onSnapshot(getColRef('mtc_announcements_v2'), (snap) => {
+      setAnnouncements(snap.docs.map(d => ({ docId: d.id, ...d.data() })));
+    }, (err) => console.error('Announcements error:', err));
+
+    const unsubAttendance = onSnapshot(getColRef('mtc_attendance_v2'), (snap) => {
+      setAttendance(snap.docs.map(d => ({ docId: d.id, ...d.data() })));
+    }, (err) => console.error('Attendance error:', err));
+
+    const unsubPayments = onSnapshot(getColRef('mtc_payments_v2'), (snap) => {
+      setPayments(snap.docs.map(d => ({ docId: d.id, ...d.data() })));
+    }, (err) => console.error('Payments error:', err));
+
+    const unsubMessages = onSnapshot(getColRef('mtc_messages_v2'), (snap) => {
+      setMessages(snap.docs.map(d => ({ docId: d.id, ...d.data() })));
+    }, (err) => console.error('Messages error:', err));
+
+    return () => {
+      unsubUsers();
+      unsubMaterials();
+      unsubAssignments();
+      unsubSubmissions();
+      unsubTimetable();
+      unsubAnnouncements();
+      unsubAttendance();
+      unsubPayments();
+      unsubMessages();
+    };
+  }, [fbUser]);
+
+  const seedInitialCollegeData = async () => {
+    if (!fbUser || seedingStatus) return;
+    setSeedingStatus(true);
+    try {
+      const getCol = (name) => collection(db, 'artifacts', appId, 'public', 'data', name);
+      for (const u of SEED_USERS) {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mtc_users_v2', u.id), u);
+      }
+      for (const m of SEED_MATERIALS) await addDoc(getCol('mtc_materials_v2'), m);
+      for (const a of SEED_ASSIGNMENTS) await addDoc(getCol('mtc_assignments_v2'), a);
+      for (const s of SEED_SUBMISSIONS) await addDoc(getCol('mtc_submissions_v2'), s);
+      for (const t of SEED_TIMETABLE) await addDoc(getCol('mtc_timetable_v2'), t);
+      for (const an of SEED_ANNOUNCEMENTS) await addDoc(getCol('mtc_announcements_v2'), an);
+      for (const at of SEED_ATTENDANCE) await addDoc(getCol('mtc_attendance_v2'), at);
+      for (const p of SEED_PAYMENTS) await addDoc(getCol('mtc_payments_v2'), p);
+      for (const msg of SEED_MESSAGES) await addDoc(getCol('mtc_messages_v2'), msg);
+    } catch (error) {
+      console.error('Seed error:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (usersList.length > 0 && currentUserProfile) {
+      const updated = usersList.find(
+        u => u.regNumber === currentUserProfile.regNumber || u.email === currentUserProfile.email
+      );
+      if (updated) setCurrentUserProfile(updated);
+    }
+  }, [usersList]);
+
+  // ============================================================================
+  // AUTH & ROLE SWITCHING HANDLERS
+  // ============================================================================
+  const handleSelfRegister = async (e) => {
+    e.preventDefault();
+    if (!fbUser) return;
+    if (!regForm.fullName || !regForm.email || !regForm.regNumber) {
+      showNotification('Complete all mandatory registration fields.', 'error');
+      return;
+    }
+
+    try {
+      const newProfile = {
+        id: `user_${Date.now()}`,
+        fullName: regForm.fullName.trim(),
+        email: regForm.email.trim().toLowerCase(),
+        role: regForm.role,
+        regNumber: regForm.regNumber.trim().toUpperCase(),
+        department: regForm.department,
+        intake: regForm.role === 'student' ? 'Diploma Intake 24 (Year 2)' : 'Academic Staff',
+        tpSchool: regForm.tpSchool || 'Mkoba 6 High School, Gweru',
+        feeBalanceUSD: regForm.role === 'student' ? 450 : 0,
+        totalFeesUSD: regForm.role === 'student' ? 450 : 0,
+        zigRate: 26.5,
+        examCleared: regForm.role !== 'student',
+        verified: true
+      };
+
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mtc_users_v2', newProfile.id), newProfile);
+      setCurrentUserProfile(newProfile);
+      setIsAuthenticatedView(true);
+      setActiveTab('dashboard');
+      showNotification(`Account registered: ${newProfile.regNumber} (${newProfile.fullName})`);
+    } catch (error) {
+      console.error('Registration error:', error);
+      showNotification('Registration failed. Check network status.', 'error');
+    }
+  };
+
+  const handlePortalLogin = (e) => {
+    e.preventDefault();
+    const searchVal = regForm.email.trim().toLowerCase();
+    const pool = usersList.length > 0 ? usersList : SEED_USERS;
+    const foundUser = pool.find(
+      u => u.email?.toLowerCase() === searchVal || u.regNumber?.toLowerCase() === searchVal
+    );
+
+    if (foundUser) {
+      setCurrentUserProfile(foundUser);
+      setIsAuthenticatedView(true);
+      setActiveTab('dashboard');
+      showNotification(`Authenticated: ${foundUser.regNumber} (${foundUser.fullName})`);
+    } else {
+      showNotification('ID not found in Registry. Use a Demo Role button or Self-Register.', 'error');
+    }
+  };
+
+  const switchDemoRole = (roleType) => {
+    const pool = usersList.length > 0 ? usersList : SEED_USERS;
+    const match = pool.find(u => u.role === roleType) || SEED_USERS.find(u => u.role === roleType);
+    if (match) {
+      setCurrentUserProfile(match);
+      setIsAuthenticatedView(true);
+      setActiveTab('dashboard');
+      setMobileMenuOpen(false);
+      showNotification(`Active Role: ${roleType.toUpperCase()} [${match.regNumber}]`);
+    }
+  };
+
+  // ============================================================================
+  // CRUD HANDLERS FOR 7 CORE PORTAL MODULES
+  // ============================================================================
+  const [materialForm, setMaterialForm] = useState({
+    title: '',
+    moduleCode: 'PRO-401',
+    type: 'SYLLABUS DOCKET',
+    description: ''
+  });
+
+  const handleUploadMaterial = async (e) => {
+    e.preventDefault();
+    if (!fbUser || !materialForm.title) return;
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mtc_materials_v2'), {
+      ...materialForm,
+      uploadedBy: currentUserProfile.fullName,
+      date: '17 Oct 2026',
+      fileSize: '1.9 MB',
+      refCode: `DOC-${materialForm.moduleCode}-${Math.floor(100 + Math.random() * 899)}`
+    });
+    setMaterialForm({ title: '', moduleCode: 'PRO-401', type: 'SYLLABUS DOCKET', description: '' });
+    showNotification('Syllabus docket committed to Student Repository.');
+  };
+
+  const [assignmentForm, setAssignmentForm] = useState({
+    title: '',
+    moduleCode: 'PRO-401',
+    dueDate: '2026-11-18',
+    instructions: ''
+  });
+
+  const handleCreateAssignment = async (e) => {
+    e.preventDefault();
+    if (!fbUser || !assignmentForm.title) return;
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mtc_assignments_v2'), {
+      ...assignmentForm,
+      totalMarks: 100,
+      createdBy: currentUserProfile.fullName,
+      docketNo: `CW-2026-0${assignments.length + 1}`
+    });
+    setAssignmentForm({ title: '', moduleCode: 'PRO-401', dueDate: '2026-11-18', instructions: '' });
+    showNotification('Coursework docket issued to intake.');
+  };
+
+  const [submissionModal, setSubmissionModal] = useState(null);
+  const [submissionText, setSubmissionText] = useState('');
+
+  const handleStudentSubmitAssignment = async (e) => {
+    e.preventDefault();
+    if (!fbUser || !submissionModal || !submissionText.trim()) return;
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mtc_submissions_v2'), {
+      assignmentTitle: submissionModal.title,
+      moduleCode: submissionModal.moduleCode,
+      studentReg: currentUserProfile.regNumber,
+      studentName: currentUserProfile.fullName,
+      submittedAt: '17 Oct 2026',
+      submissionText: submissionText.trim(),
+      status: 'SUBMITTED',
+      caMark: null,
+      examMark: null,
+      feedback: 'Logged in Registry. Pending Lecturer Moderation.'
+    });
+    setSubmissionModal(null);
+    setSubmissionText('');
+    showNotification(`Submission logged for ${submissionModal.moduleCode}.`);
+  };
+
+  const [gradingEdit, setGradingEdit] = useState({});
+  const handleSaveGrade = async (sub) => {
+    if (!fbUser || !sub.docId) return;
+    const edits = gradingEdit[sub.docId] || {};
+    const caMark = edits.caMark !== undefined ? Number(edits.caMark) : (sub.caMark || 0);
+    const examMark = edits.examMark !== undefined ? Number(edits.examMark) : (sub.examMark || 0);
+    const feedback = edits.feedback !== undefined ? edits.feedback : (sub.feedback || 'Verified by Examiner.');
+
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mtc_submissions_v2', sub.docId), {
+      caMark,
+      examMark,
+      feedback,
+      status: 'GRADED'
+    });
+    showNotification(`Marks committed for ${sub.studentReg} (${sub.moduleCode}).`);
+  };
+
+  const [attendanceModule, setAttendanceModule] = useState('PRO-401');
+  const [attendanceVenue, setAttendanceVenue] = useState('Main Lecture Theatre (MLT)');
+  const [attendanceDate, setAttendanceDate] = useState('2026-10-17');
+
+  const handleMarkAttendance = async (student, status) => {
+    if (!fbUser) return;
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mtc_attendance_v2'), {
+      date: attendanceDate,
+      moduleCode: attendanceModule,
+      venue: attendanceVenue,
+      studentReg: student.regNumber,
+      studentName: student.fullName,
+      status,
+      recordedBy: currentUserProfile.fullName
+    });
+    showNotification(`Roll Call: ${student.regNumber} marked ${status}`);
+  };
+
+  const [noticeForm, setNoticeForm] = useState({
+    title: '',
+    category: 'ACADEMIC REGISTRY',
+    priority: 'STANDARD',
+    body: ''
+  });
+
+  const handlePostAnnouncement = async (e) => {
+    e.preventDefault();
+    if (!fbUser || !noticeForm.title || !noticeForm.body) return;
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mtc_announcements_v2'), {
+      ...noticeForm,
+      author: `${currentUserProfile.fullName} (${currentUserProfile.role.toUpperCase()})`,
+      date: '17 Oct 2026',
+      refNo: `CIRCULAR/MTC/2026/${Math.floor(50 + Math.random() * 49)}`
+    });
+    setNoticeForm({ title: '', category: 'ACADEMIC REGISTRY', priority: 'STANDARD', body: '' });
+    showNotification('Official circular published to noticeboard.');
+  };
+
+  const [paymentForm, setPaymentForm] = useState({
+    amountUSD: '',
+    currencyUsed: 'ZB Bank Gweru Branch (USD Cash Deposit)',
+    reference: ''
+  });
+
+  const handleStudentPayment = async (e) => {
+    e.preventDefault();
+    if (!fbUser || !paymentForm.amountUSD || !paymentForm.reference) return;
+    const paidAmount = Number(paymentForm.amountUSD);
+    if (isNaN(paidAmount) || paidAmount <= 0) return;
+
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mtc_payments_v2'), {
+      studentReg: currentUserProfile.regNumber,
+      studentName: currentUserProfile.fullName,
+      amountUSD: paidAmount,
+      amountZiG: Math.round(paidAmount * 26.5),
+      currencyUsed: paymentForm.currencyUsed,
+      reference: paymentForm.reference.toUpperCase(),
+      date: '17 Oct 2026',
+      status: 'VERIFIED'
+    });
+
+    if (currentUserProfile.docId || currentUserProfile.id) {
+      const docKey = currentUserProfile.docId || currentUserProfile.id;
+      const newBalance = Math.max(0, (currentUserProfile.feeBalanceUSD || 0) - paidAmount);
+      const isCleared = newBalance <= 90;
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mtc_users_v2', docKey), {
+        feeBalanceUSD: newBalance,
+        examCleared: isCleared
+      });
+    }
+
+    setPaymentForm({ amountUSD: '', currencyUsed: 'ZB Bank Gweru Branch (USD Cash Deposit)', reference: '' });
+    showNotification(`Receipt logged: $${paidAmount} USD (${Math.round(paidAmount * 26.5)} ZiG).`);
+  };
+
+  const [msgForm, setMsgForm] = useState({
+    moduleCode: 'PRO-401',
+    recipientName: 'Dr. Taurai Moyo',
+    subject: '',
+    text: ''
+  });
+  const [replyTexts, setReplyTexts] = useState({});
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!fbUser || !msgForm.subject || !msgForm.text) return;
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mtc_messages_v2'), {
+      senderName: currentUserProfile.fullName,
+      senderRole: currentUserProfile.role,
+      senderReg: currentUserProfile.regNumber,
+      recipientRole: currentUserProfile.role === 'student' ? 'teacher' : 'student',
+      recipientName: msgForm.recipientName,
+      moduleCode: msgForm.moduleCode,
+      subject: msgForm.subject,
+      text: msgForm.text,
+      timestamp: '17 Oct 2026, 12:20',
+      reply: ''
+    });
+    setMsgForm({ ...msgForm, subject: '', text: '' });
+    showNotification('Academic dispatch transmitted.');
+  };
+
+  const handleSendReply = async (msg) => {
+    const replyVal = replyTexts[msg.docId];
+    if (!fbUser || !msg.docId || !replyVal) return;
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mtc_messages_v2', msg.docId), {
+      reply: `${replyVal} [Signed: ${currentUserProfile.fullName}, ${currentUserProfile.regNumber}]`
+    });
+    setReplyTexts({ ...replyTexts, [msg.docId]: '' });
+    showNotification('Official response appended to thread.');
+  };
+
+  const handleToggleClearance = async (studentUser) => {
+    if (!fbUser) return;
+    const docKey = studentUser.docId || studentUser.id;
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mtc_users_v2', docKey), {
+      examCleared: !studentUser.examCleared
+    });
+    showNotification(`Clearance status updated for ${studentUser.regNumber}.`);
+  };
+
+  const handleChangeUserRole = async (userObj, newRole) => {
+    if (!fbUser) return;
+    const docKey = userObj.docId || userObj.id;
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mtc_users_v2', docKey), {
+      role: newRole
+    });
+    showNotification(`Role updated for ${userObj.regNumber} to ${newRole.toUpperCase()}.`);
+  };
+
+  // ============================================================================
+  // COMPUTED DATA
+  // ============================================================================
+  const [selectedModuleFilter, setSelectedModuleFilter] = useState('ALL');
+
+  const activeMaterials = materials.length > 0 ? materials : SEED_MATERIALS;
+  const activeAssignments = assignments.length > 0 ? assignments : SEED_ASSIGNMENTS;
+  const activeSubmissions = submissions.length > 0 ? submissions : SEED_SUBMISSIONS;
+  const activeTimetable = timetable.length > 0 ? timetable : SEED_TIMETABLE;
+  const activeAnnouncements = announcements.length > 0 ? announcements : SEED_ANNOUNCEMENTS;
+  const activeAttendance = attendance.length > 0 ? attendance : SEED_ATTENDANCE;
+  const activePayments = payments.length > 0 ? payments : SEED_PAYMENTS;
+  const activeMessages = messages.length > 0 ? messages : SEED_MESSAGES;
+  const activeUsers = usersList.length > 0 ? usersList : SEED_USERS;
+
+  const studentSubmissions = useMemo(() => {
+    return activeSubmissions.filter(s => s.studentReg === currentUserProfile.regNumber);
+  }, [activeSubmissions, currentUserProfile]);
+
+  const studentAttendance = useMemo(() => {
+    return activeAttendance.filter(a => a.studentReg === currentUserProfile.regNumber);
+  }, [activeAttendance, currentUserProfile]);
+
+  const attendanceRate = useMemo(() => {
+    if (studentAttendance.length === 0) return 94;
+    const presentCount = studentAttendance.filter(a => a.status === 'PRESENT' || a.status === 'LATE').length;
+    return Math.round((presentCount / studentAttendance.length) * 100);
+  }, [studentAttendance]);
+
+  const studentPayments = useMemo(() => {
+    return activePayments.filter(p => p.studentReg === currentUserProfile.regNumber);
+  }, [activePayments, currentUserProfile]);
+
+  const allStudents = useMemo(() => {
+    return activeUsers.filter(u => u.role === 'student');
+  }, [activeUsers]);
+
+  // UZ Associateship Grading Scale (40% CA + 60% Exam)
+  const calculateUZGrade = (ca, exam) => {
+    if (ca === null || ca === undefined) {
+      return { final: 'PENDING', classification: 'UNGRADED', code: 'INC', badgeBg: 'bg-[#EAE5D9] text-[#141413]' };
+    }
+    const finalScore = exam ? Math.round(ca * 0.4 + exam * 0.6) : ca;
+    if (finalScore >= 75) {
+      return { final: `${finalScore}%`, classification: '1 (DISTINCTION)', code: 'DIST', badgeBg: 'bg-[#1B4332] text-[#FFFFFF]' };
+    }
+    if (finalScore >= 65) {
+      return { final: `${finalScore}%`, classification: '2.1 (MERIT)', code: 'MERIT', badgeBg: 'bg-[#141413] text-[#F4F1EA]' };
+    }
+    if (finalScore >= 50) {
+      return { final: `${finalScore}%`, classification: '3 (CREDIT PASS)', code: 'PASS', badgeBg: 'bg-[#EAE5D9] text-[#141413]' };
+    }
+    return { final: `${finalScore}%`, classification: 'F (REPEAT MODULE)', code: 'FAIL', badgeBg: 'bg-[#8C2D19] text-[#FFFFFF]' };
+  };
+
+  // Navigation per role
+  const navItems = useMemo(() => {
+    if (currentUserProfile.role === 'student') {
+      return [
+        { id: 'dashboard', code: '01', label: 'ACADEMIC LEDGER & DOCKET', icon: Layers },
+        { id: 'materials', code: '02', label: 'SYLLABUS & NOTES REPOSITORY', icon: BookOpen },
+        { id: 'assignments', code: '03', label: 'COURSEWORK SUBMISSIONS', icon: FileText },
+        { id: 'results', code: '04', label: 'UZ ASSOCIATESHIP TRANSCRIPT', icon: Award },
+        { id: 'timetable', code: '05', label: 'GWERU CAMPUS TIMETABLE', icon: Calendar },
+        { id: 'fees', code: '06', label: 'BURSARY & EXAM CLEARANCE', icon: DollarSign },
+        { id: 'attendance', code: '07', label: 'ROLL-CALL REGISTER', icon: CheckSquare },
+        { id: 'messages', code: '08', label: 'LECTURER CORRESPONDENCE', icon: MessageSquare }
+      ];
+    }
+    if (currentUserProfile.role === 'teacher') {
+      return [
+        { id: 'dashboard', code: '01', label: 'LECTURER COMMAND DESK', icon: Layers },
+        { id: 'materials', code: '02', label: 'PUBLISH SYLLABUS DOCKETS', icon: Upload },
+        { id: 'assignments', code: '03', label: 'CA & EXAM GRADING LEDGER', icon: Award },
+        { id: 'attendance', code: '04', label: 'LECTURE ROLL-CALL REGISTER', icon: UserCheck },
+        { id: 'timetable', code: '05', label: 'CAMPUS VENUE SCHEDULE', icon: Calendar },
+        { id: 'messages', code: '06', label: 'TRAINEE DISPATCHES', icon: MessageSquare }
+      ];
+    }
+    return [
+      { id: 'dashboard', code: '01', label: 'REGISTRY CONTROL LEDGER', icon: Shield },
+      { id: 'users', code: '02', label: 'STAFF & TRAINEE DIRECTORY', icon: Users },
+      { id: 'fees', code: '03', label: 'BURSARY CLEARANCE CONTROL', icon: DollarSign },
+      { id: 'timetable', code: '04', label: 'OFFICIAL CIRCULARS & SCHEDULE', icon: Calendar }
+    ];
+  }, [currentUserProfile.role]);
+
+  return (
+    <div
+      className="min-h-screen bg-[#F4F1EA] text-[#141413] flex flex-col selection:bg-[#1B4332] selection:text-[#FFFFFF]"
+      style={{ fontFamily: "'Manrope', sans-serif" }}
+    >
+      {/* ====================================================================
+          CUSTOM GOOGLE FONTS & UTILITARIAN ARCHITECTURAL TOKENS
+         ==================================================================== */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Urbanist:wght@600;700;800;900&display=swap');
+        
+        .font-display {
+          font-family: 'Urbanist', sans-serif;
+          letter-spacing: -0.025em;
+        }
+        .font-body {
+          font-family: 'Manrope', sans-serif;
+        }
+        .font-mono-code {
+          font-family: 'JetBrains Mono', monospace;
+          letter-spacing: -0.01em;
+        }
+        .brutal-shadow {
+          box-shadow: 4px 4px 0px 0px #141413;
+        }
+        .brutal-shadow-sm {
+          box-shadow: 2px 2px 0px 0px #141413;
+        }
+        .brutal-shadow-green {
+          box-shadow: 4px 4px 0px 0px #1B4332;
+        }
+        .brutal-shadow-ochre {
+          box-shadow: 4px 4px 0px 0px #B85D19;
+        }
+        .barcode-pattern {
+          background-image: repeating-linear-gradient(
+            to right,
+            #141413 0px,
+            #141413 2px,
+            transparent 2px,
+            transparent 5px,
+            #141413 5px,
+            #141413 6px,
+            transparent 6px,
+            transparent 9px,
+            #141413 9px,
+            #141413 13px,
+            transparent 13px,
+            transparent 15px
+          );
+        }
+      `}</style>
+
+      {/* ====================================================================
+          TOP UTILITARIAN ROLE SWITCHER & DESIGN.MD SPECIFICATION BAR
+         ==================================================================== */}
+      <div className="bg-[#141413] text-[#F4F1EA] px-4 py-2.5 border-b-2 border-[#141413] flex flex-wrap items-center justify-between gap-3 z-50">
+        <div className="flex items-center gap-3">
+          <span className="bg-[#B85D19] text-[#FFFFFF] font-mono-code font-bold px-2 py-0.5 text-[11px] uppercase border border-[#F4F1EA]">
+            MTC-SYS-V2.6
+          </span>
+          <span className="font-mono-code text-xs text-[#EAE5D9] hidden md:inline">
+            GWERU CAMPUS ROLE SWITCHER [LIVE FIRESTORE SYNC]:
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => switchDemoRole('student')}
+            className={`px-3 py-1 font-mono-code text-xs font-bold uppercase border transition flex items-center gap-1.5 ${
+              currentUserProfile.role === 'student' && isAuthenticatedView
+                ? 'bg-[#1B4332] text-[#FFFFFF] border-[#F4F1EA]'
+                : 'bg-[#141413] text-[#EAE5D9] border-[#EAE5D9]/40 hover:border-[#F4F1EA]'
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5" strokeWidth={1.75} />
+            STUDENT PORTAL
+          </button>
+
+          <button
+            onClick={() => switchDemoRole('teacher')}
+            className={`px-3 py-1 font-mono-code text-xs font-bold uppercase border transition flex items-center gap-1.5 ${
+              currentUserProfile.role === 'teacher' && isAuthenticatedView
+                ? 'bg-[#B85D19] text-[#FFFFFF] border-[#F4F1EA]'
+                : 'bg-[#141413] text-[#EAE5D9] border-[#EAE5D9]/40 hover:border-[#F4F1EA]'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" strokeWidth={1.75} />
+            LECTURER PORTAL
+          </button>
+
+          <button
+            onClick={() => switchDemoRole('admin')}
+            className={`px-3 py-1 font-mono-code text-xs font-bold uppercase border transition flex items-center gap-1.5 ${
+              currentUserProfile.role === 'admin' && isAuthenticatedView
+                ? 'bg-[#8C2D19] text-[#FFFFFF] border-[#F4F1EA]'
+                : 'bg-[#141413] text-[#EAE5D9] border-[#EAE5D9]/40 hover:border-[#F4F1EA]'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" strokeWidth={1.75} />
+            REGISTRAR ADMIN
+          </button>
+
+          <button
+            onClick={() => setIsAuthenticatedView(false)}
+            className={`px-3 py-1 font-mono-code text-xs font-bold uppercase border transition flex items-center gap-1.5 ${
+              !isAuthenticatedView
+                ? 'bg-[#F4F1EA] text-[#141413] border-[#F4F1EA]'
+                : 'bg-[#141413] text-[#B85D19] border-[#B85D19] hover:bg-[#B85D19] hover:text-[#FFFFFF]'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" strokeWidth={1.75} />
+            SELF-REGISTRATION / AUTH
+          </button>
+
+          <button
+            onClick={() => setShowDesignSpec(!showDesignSpec)}
+            className="px-3 py-1 font-mono-code text-xs font-bold uppercase bg-[#EAE5D9] text-[#141413] border border-[#141413] hover:bg-[#FFFFFF] transition flex items-center gap-1.5"
+          >
+            <Terminal className="w-3.5 h-3.5" strokeWidth={1.75} />
+            {showDesignSpec ? 'CLOSE DESIGN.MD' : 'DESIGN.MD SPEC'}
+          </button>
+        </div>
+      </div>
+
+      {/* ====================================================================
+          TOAST STATUS BAR (SHARP, SOLID, ZERO BLUR)
+         ==================================================================== */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-md bg-[#141413] text-[#F4F1EA] border-2 border-[#141413] brutal-shadow-ochre p-4 flex items-center gap-3">
+          <div className={`w-3 h-3 shrink-0 ${toast.type === 'error' ? 'bg-[#8C2D19]' : 'bg-[#1B4332]'}`} />
+          <div className="font-mono-code text-xs">
+            <span className="uppercase font-bold text-[#B85D19] block">SYSTEM LOG [17 OCT 2026]</span>
+            <span>{toast.message}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================
+          LOCKED DESIGN.MD SPECIFICATION DRAWER
+         ==================================================================== */}
+      {showDesignSpec && (
+        <div className="fixed inset-0 bg-[#141413]/80 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#F4F1EA] border-2 border-[#141413] brutal-shadow max-w-4xl w-full p-6 md:p-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between border-b-2 border-[#141413] pb-4 mb-6">
+              <div>
+                <span className="font-mono-code text-xs font-bold uppercase px-2 py-0.5 bg-[#1B4332] text-[#FFFFFF]">
+                  DESIGN.MD // HARD ARCHITECTURAL CONSTRAINTS
+                </span>
+                <h2 className="font-display text-2xl font-black text-[#141413] mt-2 uppercase">
+                  Mkoba Teachers College Utilitarian & Editorial System
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowDesignSpec(false)}
+                className="p-2 bg-[#FFFFFF] border-2 border-[#141413] text-[#141413] hover:bg-[#141413] hover:text-[#FFFFFF]"
+              >
+                <X className="w-5 h-5" strokeWidth={1.75} />
+              </button>
+            </div>
+
+            <div className="grid md:grid-cols-12 gap-4 text-xs">
+              <div className="md:col-span-5 bg-[#FFFFFF] border-2 border-[#141413] p-4 space-y-3">
+                <h3 className="font-display font-black text-sm uppercase border-b border-[#141413] pb-1">
+                  1. Color Tokens (Zero Gradients)
+                </h3>
+                <div className="space-y-2 font-mono-code">
+                  <div className="flex items-center justify-between p-2 bg-[#F4F1EA] border border-[#141413]">
+                    <span>Canvas Alabaster</span>
+                    <span className="font-bold">#F4F1EA</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2 bg-[#EAE5D9] border border-[#141413]">
+                    <span>Structural Stone</span>
+                    <span className="font-bold">#EAE5D9</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2 bg-[#141413] text-[#FFFFFF] border border-[#141413]">
+                    <span>Primary Ink & Hairline</span>
+                    <span className="font-bold">#141413</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2 bg-[#1B4332] text-[#FFFFFF] border border-[#141413]">
+                    <span>Mkoba Forest Green</span>
+                    <span className="font-bold">#1B4332</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2 bg-[#B85D19] text-[#FFFFFF] border border-[#141413]">
+                    <span>Midlands Terracotta</span>
+                    <span className="font-bold">#B85D19</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2 bg-[#8C2D19] text-[#FFFFFF] border border-[#141413]">
+                    <span>Deep Rust Alert</span>
+                    <span className="font-bold">#8C2D19</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="md:col-span-7 bg-[#FFFFFF] border-2 border-[#141413] p-4 space-y-3">
+                <h3 className="font-display font-black text-sm uppercase border-b border-[#141413] pb-1">
+                  2. Typography & Asymmetric Grid Rules
+                </h3>
+                <p className="leading-relaxed">
+                  <strong>Forbidden Defaults:</strong> Inter, Roboto, Arial, Helvetica, purple/indigo gradients, soft glassmorphism, M-dashes, and uniform 3-card rows are completely stripped.
+                </p>
+                <div className="p-3 bg-[#EAE5D9] border border-[#141413] space-y-1.5 font-mono-code">
+                  <div>DISPLAY HEADERS: 'Urbanist' (800/900 weight, tight tracking)</div>
+                  <div>EDITORIAL BODY & TABLES: 'Manrope' (500/700 weight)</div>
+                  <div>DOCKETS, CODES & CURRENCY: 'JetBrains Mono' (MTC/2026/0842)</div>
+                </div>
+                <h4 className="font-display font-black text-sm uppercase pt-2">
+                  3. Beginner Deployment Checklist
+                </h4>
+                <ol className="list-decimal list-inside space-y-1 text-xs">
+                  <li>Create a Firestore database at console.firebase.google.com and copy your config into <code className="font-mono-code bg-[#EAE5D9] px-1">firebaseConfig</code>.</li>
+                  <li>All 3 portals (Student, Lecturer, Registrar Admin) read and write to the shared <code className="font-mono-code bg-[#EAE5D9] px-1">mtc_*_v2</code> collections.</li>
+                  <li>Deploy this single-file application to Vercel or Firebase Hosting and bind your custom subdomain <code className="font-mono-code bg-[#EAE5D9] px-1">portal.mkobateachers.ac.zw</code>.</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================
+          SELF-REGISTRATION & AUTHENTICATION GATEWAY (ASYMMETRIC 12-COL)
+         ==================================================================== */}
+      {!isAuthenticatedView ? (
+        <div className="flex-1 flex items-center justify-center p-4 md:p-8 bg-[#EAE5D9]">
+          <div className="max-w-6xl w-full grid md:grid-cols-12 bg-[#F4F1EA] border-2 border-[#141413] brutal-shadow">
+            {/* Left 5-Column Institutional Manifesto & Gazette */}
+            <div className="md:col-span-5 bg-[#1B4332] text-[#F4F1EA] p-6 md:p-8 border-b-2 md:border-b-0 md:border-r-2 border-[#141413] flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b-2 border-[#F4F1EA]/30 pb-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-[#B85D19] border-2 border-[#F4F1EA] flex items-center justify-center text-[#FFFFFF]">
+                      <GraduationCap className="w-7 h-7" strokeWidth={1.75} />
+                    </div>
+                    <div>
+                      <span className="font-mono-code text-[11px] uppercase tracking-widest text-[#EAE5D9] block">
+                        EST. 1976 // GWERU, ZIMBABWE
+                      </span>
+                      <h1 className="font-display text-xl font-black uppercase tracking-tight text-[#FFFFFF]">
+                        MKOBA TEACHERS COLLEGE
+                      </h1>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#141413] text-[#F4F1EA] p-4 border border-[#F4F1EA]/40 mb-6">
+                  <span className="font-mono-code text-[10px] uppercase text-[#B85D19] block mb-1">
+                    INSTITUTIONAL AFFILIATION
+                  </span>
+                  <p className="font-display font-bold text-sm uppercase">
+                    Scheme of Association with the University of Zimbabwe (UZ)
+                  </p>
+                  <p className="font-mono-code text-xs text-[#EAE5D9] mt-1">
+                    Department of Teacher Education (DTE) • Heritage-Based Education 5.0
+                  </p>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div className="flex items-start gap-3 border-l-2 border-[#B85D19] pl-3">
+                    <span className="font-mono-code font-bold text-[#B85D19]">01</span>
+                    <div>
+                      <p className="font-bold uppercase text-[#FFFFFF]">Coursework & UZ Moderation</p>
+                      <p className="text-[#EAE5D9]">40% Continuous Assessment (CA) + 60% Final Examination ledger.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 border-l-2 border-[#B85D19] pl-3">
+                    <span className="font-mono-code font-bold text-[#B85D19]">02</span>
+                    <div>
+                      <p className="font-bold uppercase text-[#FFFFFF]">Teaching Practice Dockets</p>
+                      <p className="text-[#EAE5D9]">Supervision logs for Gweru, Shurugwi, Kwekwe, and Chirumanzu schools.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 border-l-2 border-[#B85D19] pl-3">
+                    <span className="font-mono-code font-bold text-[#B85D19]">03</span>
+                    <div>
+                      <p className="font-bold uppercase text-[#FFFFFF]">Bursary Clearance Voucher</p>
+                      <p className="text-[#EAE5D9]">Real-time USD & ZiG ledger with CBZ / ZB Bank reference verification.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-[#F4F1EA]/30 mt-8 font-mono-code text-[11px] text-[#EAE5D9] flex items-center justify-between">
+                <span>BRISTOL ROAD, MKOBA 12, GWERU</span>
+                <span>17 OCT 2026</span>
+              </div>
+            </div>
+
+            {/* Right 7-Column Self-Registration & Login Ledger */}
+            <div className="md:col-span-7 p-6 md:p-8 bg-[#FFFFFF]">
+              <div className="flex items-center justify-between border-b-2 border-[#141413] pb-4 mb-6">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAuthMode('login')}
+                    className={`px-4 py-2 font-mono-code text-xs font-bold uppercase border-2 border-[#141413] transition ${
+                      authMode === 'login'
+                        ? 'bg-[#141413] text-[#FFFFFF] brutal-shadow-sm'
+                        : 'bg-[#F4F1EA] text-[#141413] hover:bg-[#EAE5D9]'
+                    }`}
+                  >
+                    01. PORTAL SIGN IN
+                  </button>
+                  <button
+                    onClick={() => setAuthMode('register')}
+                    className={`px-4 py-2 font-mono-code text-xs font-bold uppercase border-2 border-[#141413] transition ${
+                      authMode === 'register'
+                        ? 'bg-[#B85D19] text-[#FFFFFF] brutal-shadow-sm'
+                        : 'bg-[#F4F1EA] text-[#141413] hover:bg-[#EAE5D9]'
+                    }`}
+                  >
+                    02. SELF-REGISTRATION
+                  </button>
+                </div>
+                <span className="font-mono-code text-[11px] text-[#141413] font-bold hidden sm:inline">
+                  FORM REG-2026
+                </span>
+              </div>
+
+              {authMode === 'login' ? (
+                <form onSubmit={handlePortalLogin} className="space-y-5">
+                  <div>
+                    <h2 className="font-display text-2xl font-black uppercase text-[#141413]">
+                      Identity Verification
+                    </h2>
+                    <p className="text-xs text-[#141413]/80 mt-1">
+                      Enter your Mkoba Registration Number, Staff Number, or Institutional Email.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block font-mono-code text-xs font-bold uppercase text-[#141413] mb-1.5">
+                      Candidate Reg No. / Staff ID
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="MTC/2026/0842 or STAFF/MTC/108"
+                      value={regForm.email}
+                      onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-[#F4F1EA] border-2 border-[#141413] font-mono-code text-sm focus:outline-none focus:bg-[#FFFFFF]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-mono-code text-xs font-bold uppercase text-[#141413] mb-1.5">
+                      Security Passkey
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={regForm.password}
+                      onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-[#F4F1EA] border-2 border-[#141413] font-mono-code text-sm focus:outline-none focus:bg-[#FFFFFF]"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-[#1B4332] hover:bg-[#141413] text-[#FFFFFF] font-mono-code font-bold text-xs uppercase border-2 border-[#141413] brutal-shadow transition"
+                  >
+                    AUTHENTICATE & OPEN DOCKET
+                  </button>
+
+                  {/* Pre-configured Gweru Campus Test Dockets */}
+                  <div className="pt-5 border-t-2 border-[#141413]">
+                    <p className="font-mono-code text-[11px] font-bold uppercase text-[#141413] mb-3">
+                      DIRECT DEMO ACCESS [CLICK TO LOAD RECORD]:
+                    </p>
+                    <div className="grid sm:grid-cols-3 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => switchDemoRole('student')}
+                        className="p-3 bg-[#F4F1EA] hover:bg-[#1B4332] hover:text-[#FFFFFF] text-[#141413] border-2 border-[#141413] text-left transition group"
+                      >
+                        <span className="font-mono-code text-[10px] font-bold uppercase text-[#B85D19] group-hover:text-[#EAE5D9] block">
+                          STUDENT DOCKET
+                        </span>
+                        <span className="font-display font-black text-sm block mt-0.5">Tendai Chikwanha</span>
+                        <span className="font-mono-code text-[11px] block mt-0.5">MTC/2026/0842</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => switchDemoRole('teacher')}
+                        className="p-3 bg-[#F4F1EA] hover:bg-[#B85D19] hover:text-[#FFFFFF] text-[#141413] border-2 border-[#141413] text-left transition group"
+                      >
+                        <span className="font-mono-code text-[10px] font-bold uppercase text-[#1B4332] group-hover:text-[#FFFFFF] block">
+                          LECTURER DESK
+                        </span>
+                        <span className="font-display font-black text-sm block mt-0.5">Dr. Taurai Moyo</span>
+                        <span className="font-mono-code text-[11px] block mt-0.5">STAFF/MTC/108</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => switchDemoRole('admin')}
+                        className="p-3 bg-[#F4F1EA] hover:bg-[#8C2D19] hover:text-[#FFFFFF] text-[#141413] border-2 border-[#141413] text-left transition group"
+                      >
+                        <span className="font-mono-code text-[10px] font-bold uppercase text-[#8C2D19] group-hover:text-[#FFFFFF] block">
+                          REGISTRAR & BURSAR
+                        </span>
+                        <span className="font-display font-black text-sm block mt-0.5">Mrs. Chipo Gumbo</span>
+                        <span className="font-mono-code text-[11px] block mt-0.5">ADMIN/MTC/001</span>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleSelfRegister} className="space-y-4">
+                  <div>
+                    <h2 className="font-display text-2xl font-black uppercase text-[#141413]">
+                      New Candidate / Staff Registration
+                    </h2>
+                    <p className="text-xs text-[#141413]/80">
+                      Creates a live record in the Mkoba Teachers College Firestore registry.
+                    </p>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-mono-code text-xs font-bold uppercase text-[#141413] mb-1">
+                        Portal Role Classification
+                      </label>
+                      <select
+                        value={regForm.role}
+                        onChange={(e) => {
+                          const r = e.target.value;
+                          setRegForm({
+                            ...regForm,
+                            role: r,
+                            regNumber: r === 'student' ? 'MTC/2026/0988' : r === 'teacher' ? 'STAFF/MTC/215' : 'ADMIN/MTC/009'
+                          });
+                        }}
+                        className="w-full px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] font-mono-code text-xs font-bold"
+                      >
+                        <option value="student">STUDENT (DIPLOMA CANDIDATE)</option>
+                        <option value="teacher">LECTURER / ACADEMIC STAFF</option>
+                        <option value="admin">REGISTRAR / BURSAR ADMIN</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-mono-code text-xs font-bold uppercase text-[#141413] mb-1">
+                        {regForm.role === 'student' ? 'MTC Registration Number' : 'Official Staff ID'}
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={regForm.regNumber}
+                        onChange={(e) => setRegForm({ ...regForm, regNumber: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] font-mono-code text-xs font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-mono-code text-xs font-bold uppercase text-[#141413] mb-1">
+                        Full Legal Name
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Farai Ndlovu"
+                        value={regForm.fullName}
+                        onChange={(e) => setRegForm({ ...regForm, fullName: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] text-xs font-semibold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-mono-code text-xs font-bold uppercase text-[#141413] mb-1">
+                        Institutional Email
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="f.ndlovu@mkobateachers.ac.zw"
+                        value={regForm.email}
+                        onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] font-mono-code text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-mono-code text-xs font-bold uppercase text-[#141413] mb-1">
+                        Academic Department
+                      </label>
+                      <select
+                        value={regForm.department}
+                        onChange={(e) => setRegForm({ ...regForm, department: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] text-xs font-bold"
+                      >
+                        <option>Primary Education</option>
+                        <option>Early Childhood Development</option>
+                        <option>Professional Studies</option>
+                        <option>Secondary Science</option>
+                        <option>Languages & Humanities</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-mono-code text-xs font-bold uppercase text-[#141413] mb-1">
+                        TP Host School / Office
+                      </label>
+                      <input
+                        type="text"
+                        value={regForm.tpSchool}
+                        onChange={(e) => setRegForm({ ...regForm, tpSchool: e.target.value })}
+                        placeholder="Mkoba 6 High School, Gweru"
+                        className="w-full px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-[#B85D19] hover:bg-[#141413] text-[#FFFFFF] font-mono-code font-bold text-xs uppercase border-2 border-[#141413] brutal-shadow transition"
+                  >
+                    COMMIT REGISTRATION TO MKOBA REGISTRY
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ====================================================================
+           AUTHENTICATED PORTAL SHELL (STRUCTURAL SIDEBAR + ASYMMETRIC WORKSPACE)
+           ==================================================================== */
+        <div className="flex-1 flex flex-col lg:flex-row">
+          {/* LEFT UTILITARIAN ARCHITECTURAL SIDEBAR */}
+          <aside className={`lg:w-72 bg-[#1B4332] text-[#F4F1EA] border-r-2 border-[#141413] flex flex-col justify-between shrink-0 ${
+            mobileMenuOpen ? 'block' : 'hidden lg:flex'
+          }`}>
+            <div>
+              {/* Institutional Seal Header */}
+              <div className="p-5 border-b-2 border-[#141413] bg-[#141413] text-[#F4F1EA] flex items-center gap-3">
+                <div className="w-11 h-11 bg-[#B85D19] border-2 border-[#F4F1EA] flex items-center justify-center text-[#FFFFFF] shrink-0">
+                  <GraduationCap className="w-6 h-6" strokeWidth={1.75} />
+                </div>
+                <div>
+                  <span className="font-mono-code text-[10px] uppercase tracking-widest text-[#B85D19] block font-bold">
+                    GWERU • ZIMBABWE
+                  </span>
+                  <h1 className="font-display font-black text-base tracking-tight uppercase leading-none text-[#FFFFFF]">
+                    MKOBA TEACHERS
+                  </h1>
+                  <span className="font-mono-code text-[11px] text-[#EAE5D9] uppercase">
+                    {currentUserProfile.role === 'student'
+                      ? 'CANDIDATE PORTAL'
+                      : currentUserProfile.role === 'teacher'
+                      ? 'LECTURER PORTAL'
+                      : 'REGISTRAR PORTAL'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Active Identity Docket Stamp */}
+              <div className="p-4 m-4 bg-[#F4F1EA] text-[#141413] border-2 border-[#141413] brutal-shadow-sm">
+                <div className="flex items-center justify-between border-b border-[#141413] pb-1.5 mb-2">
+                  <span className="font-mono-code text-[10px] font-bold uppercase px-1.5 py-0.5 bg-[#B85D19] text-[#FFFFFF]">
+                    {currentUserProfile.role}
+                  </span>
+                  <span className="font-mono-code text-xs font-bold text-[#141413]">
+                    {currentUserProfile.regNumber}
+                  </span>
+                </div>
+                <p className="font-display font-black text-base uppercase leading-tight truncate">
+                  {currentUserProfile.fullName}
+                </p>
+                <p className="font-mono-code text-[11px] text-[#141413]/80 mt-0.5 truncate">
+                  DEPT: {currentUserProfile.department}
+                </p>
+                <p className="font-mono-code text-[10px] text-[#1B4332] font-bold mt-1 truncate">
+                  LOC: {currentUserProfile.tpSchool || 'Gweru Main Campus'}
+                </p>
+              </div>
+
+              {/* Numbered Index Navigation */}
+              <nav className="px-4 space-y-1.5 pb-6">
+                <div className="font-mono-code text-[10px] uppercase tracking-wider text-[#EAE5D9]/70 px-1 pb-1">
+                  PORTAL DOCKET INDEX
+                </div>
+                {navItems.map((item) => {
+                  const IconComponent = item.icon;
+                  const active = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 text-left font-mono-code text-xs uppercase border-2 transition ${
+                        active
+                          ? 'bg-[#F4F1EA] text-[#141413] border-[#141413] font-bold brutal-shadow-sm'
+                          : 'bg-[#1B4332] text-[#F4F1EA] border-transparent hover:border-[#F4F1EA]/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 truncate">
+                        <span className={`text-[10px] font-bold ${active ? 'text-[#B85D19]' : 'text-[#EAE5D9]/70'}`}>
+                          {item.code}
+                        </span>
+                        <IconComponent className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+                      <ArrowUpRight className={`w-3.5 h-3.5 shrink-0 ${active ? 'opacity-100' : 'opacity-30'}`} strokeWidth={1.75} />
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+
+            {/* Bottom Session Controls */}
+            <div className="p-4 border-t-2 border-[#141413] bg-[#141413]">
+              <button
+                onClick={() => setIsAuthenticatedView(false)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#8C2D19] hover:bg-[#B85D19] text-[#FFFFFF] font-mono-code text-xs font-bold uppercase border border-[#F4F1EA] transition"
+              >
+                <LogOut className="w-4 h-4" strokeWidth={1.75} />
+                CLOSE DOCKET / SIGN OUT
+              </button>
+            </div>
+          </aside>
+
+          {/* MAIN WORKSPACE COLUMN */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Editorial Masthead Bar */}
+            <header className="bg-[#FFFFFF] border-b-2 border-[#141413] px-4 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  className="lg:hidden p-2 bg-[#F4F1EA] border-2 border-[#141413] text-[#141413]"
+                >
+                  {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                </button>
+                <div>
+                  <div className="flex items-center gap-2 font-mono-code text-[11px] text-[#B85D19] font-bold uppercase">
+                    <span>MKOBA TEACHERS COLLEGE</span>
+                    <span>/</span>
+                    <span>SAT 17 OCT 2026</span>
+                    <span>/</span>
+                    <span>TERM 3 SESSION</span>
+                  </div>
+                  <h2 className="font-display text-xl md:text-2xl font-black text-[#141413] uppercase tracking-tight">
+                    {navItems.find(n => n.id === activeTab)?.label || 'ACADEMIC LEDGER'}
+                  </h2>
+                </div>
+              </div>
+
+              {/* Right Concrete Status Stamp */}
+              <div className="flex items-center gap-3">
+                {currentUserProfile.role === 'student' && (
+                  <div className={`px-3 py-1.5 border-2 border-[#141413] font-mono-code text-xs font-bold uppercase flex items-center gap-2 ${
+                    currentUserProfile.examCleared
+                      ? 'bg-[#1B4332] text-[#FFFFFF]'
+                      : 'bg-[#8C2D19] text-[#FFFFFF]'
+                  }`}>
+                    {currentUserProfile.examCleared ? (
+                      <>
+                        <CheckCircle className="w-4 h-4" strokeWidth={1.75} />
+                        EXAM PERMIT: CLEARED
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-4 h-4" strokeWidth={1.75} />
+                        EXAM PERMIT: ARREARS HOLD
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="hidden sm:block bg-[#EAE5D9] border-2 border-[#141413] px-3 py-1 font-mono-code text-xs">
+                  <span className="text-[10px] uppercase block text-[#141413]/70">INTERBANK RATE</span>
+                  <span className="font-bold">1 USD = 26.50 ZiG</span>
+                </div>
+              </div>
+            </header>
+
+            {/* MAIN CONTENT CONTAINER */}
+            <main className="flex-1 p-4 lg:p-8 max-w-7xl w-full mx-auto space-y-8">
+              {/* ==============================================================
+                  1. ASYMMETRIC DASHBOARD WORKSPACE (12-COLUMN BROKEN GRID)
+                 ============================================================== */}
+              {activeTab === 'dashboard' && (
+                <div className="space-y-8">
+                  {/* Asymmetric 12-Column Top Split: 8-Col Ledger + 4-Col Concrete Artifact */}
+                  <div className="grid lg:grid-cols-12 gap-6 items-start">
+                    {/* Left 8-Column Primary Operational Ledger */}
+                    <div className="lg:col-span-8 space-y-6">
+                      {/* Heavy Editorial Banner */}
+                      <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow p-6">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#141413] pb-3 mb-4">
+                          <span className="font-mono-code text-xs font-bold uppercase bg-[#141413] text-[#F4F1EA] px-2.5 py-1">
+                            OFFICIAL RECORD // {currentUserProfile.regNumber}
+                          </span>
+                          <span className="font-mono-code text-xs font-bold text-[#1B4332]">
+                            UZ ASSOCIATESHIP SCHEME • INTAKE 24
+                          </span>
+                        </div>
+
+                        <h3 className="font-display text-2xl sm:text-3xl font-black uppercase text-[#141413] leading-none">
+                          {currentUserProfile.fullName}
+                        </h3>
+
+                        <div className="grid sm:grid-cols-3 gap-4 mt-5 pt-4 border-t border-[#141413]/30 font-mono-code text-xs">
+                          <div>
+                            <span className="text-[10px] uppercase text-[#141413]/70 block">PROGRAMME / DEPT</span>
+                            <span className="font-bold text-[#141413]">{currentUserProfile.department}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase text-[#141413]/70 block">TP DEPLOYMENT / STATION</span>
+                            <span className="font-bold text-[#B85D19]">{currentUserProfile.tpSchool || 'Mkoba 6 High School'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase text-[#141413]/70 block">ROLL-CALL ATTENDANCE</span>
+                            <span className="font-bold text-[#1B4332]">{attendanceRate}% VERIFIED</span>
+                          </div>
+                        </div>
+
+                        {/* Action Bar */}
+                        <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t-2 border-[#141413]">
+                          {currentUserProfile.role === 'student' && (
+                            <>
+                              <button
+                                onClick={() => setActiveTab('assignments')}
+                                className="px-4 py-2 bg-[#1B4332] hover:bg-[#141413] text-[#FFFFFF] font-mono-code text-xs font-bold uppercase border-2 border-[#141413] brutal-shadow-sm transition"
+                              >
+                                SUBMIT COURSEWORK DOCKET
+                              </button>
+                              <button
+                                onClick={() => setActiveTab('results')}
+                                className="px-4 py-2 bg-[#EAE5D9] hover:bg-[#B85D19] hover:text-[#FFFFFF] text-[#141413] font-mono-code text-xs font-bold uppercase border-2 border-[#141413] transition"
+                              >
+                                INSPECT UZ GRADING LEDGER
+                              </button>
+                              <button
+                                onClick={() => setActiveTab('fees')}
+                                className="px-4 py-2 bg-[#FFFFFF] hover:bg-[#141413] hover:text-[#FFFFFF] text-[#141413] font-mono-code text-xs font-bold uppercase border-2 border-[#141413] transition"
+                              >
+                                LOG BANK / ZIG RECEIPT
+                              </button>
+                            </>
+                          )}
+                          {currentUserProfile.role === 'teacher' && (
+                            <>
+                              <button
+                                onClick={() => setActiveTab('materials')}
+                                className="px-4 py-2 bg-[#1B4332] hover:bg-[#141413] text-[#FFFFFF] font-mono-code text-xs font-bold uppercase border-2 border-[#141413] brutal-shadow-sm transition"
+                              >
+                                + UPLOAD SYLLABUS DOCKET
+                              </button>
+                              <button
+                                onClick={() => setActiveTab('assignments')}
+                                className="px-4 py-2 bg-[#B85D19] hover:bg-[#141413] text-[#FFFFFF] font-mono-code text-xs font-bold uppercase border-2 border-[#141413] brutal-shadow-sm transition"
+                              >
+                                OPEN CA & EXAM GRADING DESK
+                              </button>
+                              <button
+                                onClick={() => setActiveTab('attendance')}
+                                className="px-4 py-2 bg-[#EAE5D9] hover:bg-[#141413] hover:text-[#FFFFFF] text-[#141413] font-mono-code text-xs font-bold uppercase border-2 border-[#141413] transition"
+                              >
+                                MARK LECTURE ROLL-CALL
+                              </button>
+                            </>
+                          )}
+                          {currentUserProfile.role === 'admin' && (
+                            <>
+                              <button
+                                onClick={() => setActiveTab('fees')}
+                                className="px-4 py-2 bg-[#8C2D19] hover:bg-[#141413] text-[#FFFFFF] font-mono-code text-xs font-bold uppercase border-2 border-[#141413] brutal-shadow-sm transition"
+                              >
+                                BURSARY CLEARANCE LEDGER
+                              </button>
+                              <button
+                                onClick={() => setActiveTab('users')}
+                                className="px-4 py-2 bg-[#1B4332] hover:bg-[#141413] text-[#FFFFFF] font-mono-code text-xs font-bold uppercase border-2 border-[#141413] brutal-shadow-sm transition"
+                              >
+                                MANAGE REGISTRY ACCOUNTS
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Official Circulars & Dispatches Table */}
+                      <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow">
+                        <div className="bg-[#141413] text-[#F4F1EA] px-5 py-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Bell className="w-4 h-4 text-[#B85D19]" strokeWidth={1.75} />
+                            <h4 className="font-display font-black text-sm uppercase tracking-wider">
+                              OFFICIAL MKOBA COLLEGE CIRCULARS & GAZETTE
+                            </h4>
+                          </div>
+                          <button
+                            onClick={() => setActiveTab('timetable')}
+                            className="font-mono-code text-[11px] text-[#B85D19] hover:underline uppercase font-bold"
+                          >
+                            ALL CIRCULARS [→]
+                          </button>
+                        </div>
+
+                        <div className="divide-y-2 divide-[#141413]">
+                          {activeAnnouncements.map((item, idx) => (
+                            <div key={item.docId || idx} className="p-5 hover:bg-[#F4F1EA] transition">
+                              <div className="flex flex-wrap items-center justify-between gap-2 mb-2 font-mono-code text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-0.5 font-bold uppercase ${
+                                    item.priority === 'URGENT' || item.priority === 'MANDATORY'
+                                      ? 'bg-[#8C2D19] text-[#FFFFFF]'
+                                      : 'bg-[#1B4332] text-[#FFFFFF]'
+                                  }`}>
+                                    {item.category}
+                                  </span>
+                                  <span className="font-bold text-[#141413]">{item.refNo || 'CIRCULAR/MTC/2026'}</span>
+                                </div>
+                                <span className="text-[#141413]/70">{item.date} • {item.author}</span>
+                              </div>
+                              <h5 className="font-display font-extrabold text-base text-[#141413] uppercase">
+                                {item.title}
+                              </h5>
+                              <p className="text-xs text-[#141413]/90 mt-1.5 leading-relaxed">
+                                {item.body}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right 4-Column Concrete Institutional Artifact: Stamped Examination Clearance Docket */}
+                    <div className="lg:col-span-4 space-y-6">
+                      <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow p-5 relative">
+                        <div className="border-b-2 border-[#141413] pb-3 mb-4 flex items-center justify-between">
+                          <div>
+                            <span className="font-mono-code text-[10px] font-bold uppercase text-[#B85D19] block">
+                              ARTIFACT // FORM EX-2026
+                            </span>
+                            <h4 className="font-display font-black text-base uppercase text-[#141413]">
+                              EXAMINATION CLEARANCE DOCKET
+                            </h4>
+                          </div>
+                          <FileCheck className="w-6 h-6 text-[#1B4332]" strokeWidth={1.75} />
+                        </div>
+
+                        <div className="space-y-2.5 font-mono-code text-xs border-b-2 border-dashed border-[#141413] pb-4 mb-4">
+                          <div className="flex justify-between">
+                            <span className="text-[#141413]/70">CANDIDATE:</span>
+                            <span className="font-bold">{currentUserProfile.fullName}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#141413]/70">REG NUMBER:</span>
+                            <span className="font-bold">{currentUserProfile.regNumber}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#141413]/70">SEMESTER FEE:</span>
+                            <span className="font-bold">${currentUserProfile.totalFeesUSD ?? 450}.00 USD</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#141413]/70">ARREARS BAL:</span>
+                            <span className="font-bold text-[#8C2D19]">
+                              ${currentUserProfile.feeBalanceUSD ?? 0}.00 USD ({Math.round((currentUserProfile.feeBalanceUSD ?? 0) * 26.5)} ZiG)
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#141413]/70">TP PLACEMENT:</span>
+                            <span className="font-bold truncate max-w-[170px]">{currentUserProfile.tpSchool || 'Mkoba 6 High'}</span>
+                          </div>
+                        </div>
+
+                        {/* Physical Rubber Stamp Artifact */}
+                        <div className={`p-3 border-2 text-center font-mono-code uppercase mb-4 ${
+                          currentUserProfile.examCleared
+                            ? 'border-[#1B4332] bg-[#1B4332]/10 text-[#1B4332]'
+                            : 'border-[#8C2D19] bg-[#8C2D19]/10 text-[#8C2D19]'
+                        }`}>
+                          <div className="text-[10px] font-bold tracking-widest">
+                            MKOBA TEACHERS COLLEGE BURSARY STAMP
+                          </div>
+                          <div className="text-sm font-black tracking-wider mt-0.5">
+                            {currentUserProfile.examCleared
+                              ? 'CLEARED FOR NOV 2026 EXAMS'
+                              : 'HOLD: CLEAR 80% TUITION THRESHOLD'}
+                          </div>
+                          <div className="text-[10px] mt-0.5">
+                            VERIFIED: 17 OCT 2026 • GWERU REGISTRY
+                          </div>
+                        </div>
+
+                        {/* Barcode Strip */}
+                        <div className="h-10 w-full barcode-pattern border border-[#141413]" />
+                        <div className="font-mono-code text-[10px] text-center mt-1 tracking-widest">
+                          *MTC-{currentUserProfile.regNumber.replace(/\//g, '-')}-2026*
+                        </div>
+                      </div>
+
+                      {/* Gweru Campus Venue Schedule Docket */}
+                      <div className="bg-[#EAE5D9] border-2 border-[#141413] brutal-shadow p-5">
+                        <div className="flex items-center justify-between border-b-2 border-[#141413] pb-2 mb-3">
+                          <h4 className="font-display font-black text-sm uppercase">
+                            CAMPUS VENUE DISPATCH
+                          </h4>
+                          <MapPin className="w-4 h-4 text-[#B85D19]" strokeWidth={1.75} />
+                        </div>
+                        <div className="space-y-2.5 font-mono-code text-xs">
+                          {activeTimetable.slice(0, 4).map((slot, i) => (
+                            <div key={slot.docId || i} className="bg-[#FFFFFF] border border-[#141413] p-2.5">
+                              <div className="flex justify-between font-bold">
+                                <span className="text-[#1B4332]">{slot.day}</span>
+                                <span className="bg-[#141413] text-[#FFFFFF] px-1.5">{slot.moduleCode}</span>
+                              </div>
+                              <div className="font-body font-bold text-[#141413] text-xs mt-1">
+                                {slot.venue}
+                              </div>
+                              <div className="text-[11px] text-[#141413]/70">
+                                {slot.time} • {slot.lecturer}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ==============================================================
+                  2. LEARNING MATERIALS & SYLLABUS DOCKETS
+                 ============================================================== */}
+              {activeTab === 'materials' && (
+                <div className="grid lg:grid-cols-12 gap-6 items-start">
+                  {/* Left 4-Column Filter & Upload Control */}
+                  <div className="lg:col-span-4 space-y-6">
+                    <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow p-5">
+                      <h3 className="font-display font-black text-sm uppercase border-b-2 border-[#141413] pb-2 mb-3">
+                        FILTER BY UZ COURSE CODE
+                      </h3>
+                      <div className="space-y-1.5 font-mono-code text-xs">
+                        <button
+                          onClick={() => setSelectedModuleFilter('ALL')}
+                          className={`w-full text-left px-3 py-2 border-2 border-[#141413] font-bold uppercase flex justify-between ${
+                            selectedModuleFilter === 'ALL'
+                              ? 'bg-[#1B4332] text-[#FFFFFF]'
+                              : 'bg-[#F4F1EA] text-[#141413] hover:bg-[#EAE5D9]'
+                          }`}
+                        >
+                          <span>ALL COURSE DOCKETS</span>
+                          <span>[{activeMaterials.length}]</span>
+                        </button>
+                        {INITIAL_MODULES.map(mod => (
+                          <button
+                            key={mod.code}
+                            onClick={() => setSelectedModuleFilter(mod.code)}
+                            className={`w-full text-left px-3 py-2 border-2 border-[#141413] font-bold uppercase flex justify-between ${
+                              selectedModuleFilter === mod.code
+                                ? 'bg-[#B85D19] text-[#FFFFFF]'
+                                : 'bg-[#F4F1EA] text-[#141413] hover:bg-[#EAE5D9]'
+                            }`}
+                          >
+                            <span>{mod.code}</span>
+                            <span className="truncate max-w-[140px] font-normal">{mod.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {(currentUserProfile.role === 'teacher' || currentUserProfile.role === 'admin') && (
+                      <div className="bg-[#EAE5D9] border-2 border-[#141413] brutal-shadow p-5">
+                        <h3 className="font-display font-black text-sm uppercase border-b-2 border-[#141413] pb-2 mb-3 flex items-center gap-2">
+                          <Upload className="w-4 h-4 text-[#1B4332]" strokeWidth={1.75} />
+                          PUBLISH NEW SYLLABUS DOCKET
+                        </h3>
+                        <form onSubmit={handleUploadMaterial} className="space-y-3 text-xs">
+                          <div>
+                            <label className="block font-mono-code font-bold uppercase mb-1">Docket Title</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="PRO-401: Heritage Lesson Plan Format"
+                              value={materialForm.title}
+                              onChange={(e) => setMaterialForm({ ...materialForm, title: e.target.value })}
+                              className="w-full px-3 py-2 bg-[#FFFFFF] border-2 border-[#141413]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block font-mono-code font-bold uppercase mb-1">Course Code</label>
+                            <select
+                              value={materialForm.moduleCode}
+                              onChange={(e) => setMaterialForm({ ...materialForm, moduleCode: e.target.value })}
+                              className="w-full px-3 py-2 bg-[#FFFFFF] border-2 border-[#141413] font-mono-code font-bold"
+                            >
+                              {INITIAL_MODULES.map(m => (
+                                <option key={m.code} value={m.code}>{m.code} // {m.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block font-mono-code font-bold uppercase mb-1">Classification</label>
+                            <select
+                              value={materialForm.type}
+                              onChange={(e) => setMaterialForm({ ...materialForm, type: e.target.value })}
+                              className="w-full px-3 py-2 bg-[#FFFFFF] border-2 border-[#141413] font-mono-code font-bold"
+                            >
+                              <option>SYLLABUS DOCKET</option>
+                              <option>ASSESSMENT RUBRIC</option>
+                              <option>PAST EXAM PAPER</option>
+                              <option>LAB MANUAL</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block font-mono-code font-bold uppercase mb-1">Technical Scope</label>
+                            <textarea
+                              rows={3}
+                              required
+                              placeholder="Mandatory reading and moderation instructions..."
+                              value={materialForm.description}
+                              onChange={(e) => setMaterialForm({ ...materialForm, description: e.target.value })}
+                              className="w-full p-2.5 bg-[#FFFFFF] border-2 border-[#141413]"
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            className="w-full py-2.5 bg-[#1B4332] hover:bg-[#141413] text-[#FFFFFF] font-mono-code font-bold uppercase border-2 border-[#141413] brutal-shadow-sm transition"
+                          >
+                            COMMIT TO REPOSITORY
+                          </button>
+                        </form>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right 8-Column Document Ledger */}
+                  <div className="lg:col-span-8 space-y-4">
+                    {activeMaterials
+                      .filter(m => selectedModuleFilter === 'ALL' || m.moduleCode === selectedModuleFilter)
+                      .map((mat, index) => (
+                        <div key={mat.docId || index} className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-2 font-mono-code text-xs">
+                              <span className="bg-[#1B4332] text-[#FFFFFF] font-bold px-2 py-0.5">
+                                {mat.moduleCode}
+                              </span>
+                              <span className="bg-[#EAE5D9] text-[#141413] font-bold px-2 py-0.5 border border-[#141413]">
+                                {mat.type}
+                              </span>
+                              <span className="text-[#141413]/70">
+                                REF: {mat.refCode || 'DOC-MTC-2026'} • {mat.fileSize}
+                              </span>
+                            </div>
+                            <h4 className="font-display font-black text-lg text-[#141413] uppercase">
+                              {mat.title}
+                            </h4>
+                            <p className="text-xs text-[#141413]/90 leading-relaxed">
+                              {mat.description}
+                            </p>
+                            <p className="font-mono-code text-[11px] text-[#B85D19] font-bold pt-1">
+                              ISSUED BY: {mat.uploadedBy} // DATE: {mat.date}
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => showNotification(`Retrieved Docket: ${mat.title} [${mat.fileSize}]`)}
+                            className="shrink-0 px-4 py-2.5 bg-[#B85D19] hover:bg-[#141413] text-[#FFFFFF] font-mono-code text-xs font-bold uppercase border-2 border-[#141413] brutal-shadow-sm flex items-center gap-2 self-start sm:self-center"
+                          >
+                            <Download className="w-4 h-4" strokeWidth={1.75} />
+                            PULL DOCKET
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ==============================================================
+                  3. ASSIGNMENTS, SUBMISSIONS & LECTURER GRADING DESK
+                 ============================================================== */}
+              {activeTab === 'assignments' && (
+                <div className="space-y-8">
+                  {/* Asymmetric 12-Col Coursework Section */}
+                  <div className="grid lg:grid-cols-12 gap-6 items-start">
+                    {/* Active Coursework Dockets (7 Cols) */}
+                    <div className="lg:col-span-7 bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow">
+                      <div className="bg-[#141413] text-[#F4F1EA] px-5 py-3 flex items-center justify-between">
+                        <h3 className="font-display font-black text-sm uppercase tracking-wider">
+                          ISSUED COURSEWORK & PRACTICUM DOCKETS
+                        </h3>
+                        <span className="font-mono-code text-xs text-[#B85D19] font-bold">
+                          40% CA WEIGHTING
+                        </span>
+                      </div>
+
+                      <div className="divide-y-2 divide-[#141413]">
+                        {activeAssignments.map((ass, idx) => {
+                          const mySub = studentSubmissions.find(s => s.assignmentTitle === ass.title);
+                          return (
+                            <div key={ass.docId || idx} className="p-5 space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2 font-mono-code text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-[#1B4332] text-[#FFFFFF] font-bold px-2 py-0.5">
+                                    {ass.moduleCode}
+                                  </span>
+                                  <span className="font-bold text-[#141413]">
+                                    {ass.docketNo || `CW-2026-0${idx + 1}`}
+                                  </span>
+                                </div>
+                                <span className="bg-[#EAE5D9] border border-[#141413] px-2 py-0.5 font-bold text-[#8C2D19]">
+                                  CUTOFF: {ass.dueDate}
+                                </span>
+                              </div>
+
+                              <h4 className="font-display font-black text-base uppercase text-[#141413]">
+                                {ass.title}
+                              </h4>
+                              <p className="text-xs text-[#141413]/90 leading-relaxed">
+                                {ass.instructions}
+                              </p>
+
+                              <div className="flex items-center justify-between pt-2">
+                                <span className="font-mono-code text-[11px] text-[#141413]/70">
+                                  EXAMINER: {ass.createdBy}
+                                </span>
+
+                                {currentUserProfile.role === 'student' && (
+                                  <div>
+                                    {mySub ? (
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#1B4332] text-[#FFFFFF] font-mono-code text-xs font-bold uppercase">
+                                        <CheckCircle className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                        {mySub.status} {mySub.caMark ? `[CA: ${mySub.caMark}%]` : ''}
+                                      </span>
+                                    ) : (
+                                      <button
+                                        onClick={() => setSubmissionModal(ass)}
+                                        className="px-4 py-1.5 bg-[#B85D19] hover:bg-[#141413] text-[#FFFFFF] font-mono-code text-xs font-bold uppercase border-2 border-[#141413] brutal-shadow-sm transition"
+                                      >
+                                        LODGE SUBMISSION
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Right 5-Column Box: Lecturer Assignment Publisher OR Student Submission Log */}
+                    <div className="lg:col-span-5">
+                      {currentUserProfile.role === 'teacher' ? (
+                        <div className="bg-[#EAE5D9] border-2 border-[#141413] brutal-shadow p-5">
+                          <h3 className="font-display font-black text-base uppercase border-b-2 border-[#141413] pb-2 mb-4 flex items-center gap-2">
+                            <Plus className="w-4 h-4 text-[#1B4332]" strokeWidth={1.75} />
+                            ISSUE NEW COURSEWORK DOCKET
+                          </h3>
+                          <form onSubmit={handleCreateAssignment} className="space-y-3 text-xs">
+                            <div>
+                              <label className="block font-mono-code font-bold uppercase mb-1">Coursework Title</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="PRO-401: Term 3 Classroom Audit"
+                                value={assignmentForm.title}
+                                onChange={(e) => setAssignmentForm({ ...assignmentForm, title: e.target.value })}
+                                className="w-full px-3 py-2 bg-[#FFFFFF] border-2 border-[#141413]"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="block font-mono-code font-bold uppercase mb-1">Course Code</label>
+                                <select
+                                  value={assignmentForm.moduleCode}
+                                  onChange={(e) => setAssignmentForm({ ...assignmentForm, moduleCode: e.target.value })}
+                                  className="w-full px-3 py-2 bg-[#FFFFFF] border-2 border-[#141413] font-mono-code font-bold"
+                                >
+                                  {INITIAL_MODULES.map(m => (
+                                    <option key={m.code} value={m.code}>{m.code}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block font-mono-code font-bold uppercase mb-1">Submission Cutoff</label>
+                                <input
+                                  type="date"
+                                  value={assignmentForm.dueDate}
+                                  onChange={(e) => setAssignmentForm({ ...assignmentForm, dueDate: e.target.value })}
+                                  className="w-full px-3 py-2 bg-[#FFFFFF] border-2 border-[#141413] font-mono-code"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block font-mono-code font-bold uppercase mb-1">Specification & Rubric</label>
+                              <textarea
+                                rows={3}
+                                required
+                                placeholder="Specify empirical requirements and UZ moderation formatting..."
+                                value={assignmentForm.instructions}
+                                onChange={(e) => setAssignmentForm({ ...assignmentForm, instructions: e.target.value })}
+                                className="w-full p-2.5 bg-[#FFFFFF] border-2 border-[#141413]"
+                              />
+                            </div>
+                            <button
+                              type="submit"
+                              className="w-full py-2.5 bg-[#1B4332] hover:bg-[#141413] text-[#FFFFFF] font-mono-code font-bold uppercase border-2 border-[#141413] brutal-shadow-sm transition"
+                            >
+                              ISSUE COURSEWORK DOCKET
+                            </button>
+                          </form>
+                        </div>
+                      ) : (
+                        <div className="bg-[#EAE5D9] border-2 border-[#141413] brutal-shadow p-5 space-y-4">
+                          <h3 className="font-display font-black text-base uppercase border-b-2 border-[#141413] pb-2">
+                            MY LODGED SUBMISSIONS [{studentSubmissions.length}]
+                          </h3>
+                          {studentSubmissions.map((sub, i) => (
+                            <div key={sub.docId || i} className="bg-[#FFFFFF] border-2 border-[#141413] p-3.5 space-y-1.5 text-xs">
+                              <div className="flex justify-between font-mono-code font-bold">
+                                <span className="text-[#1B4332]">{sub.moduleCode}</span>
+                                <span>{sub.submittedAt}</span>
+                              </div>
+                              <p className="font-bold text-[#141413]">{sub.assignmentTitle}</p>
+                              <p className="font-mono-code text-[11px] text-[#141413]/80 bg-[#F4F1EA] p-2 border border-[#141413]">
+                                {sub.submissionText}
+                              </p>
+                              <div className="flex justify-between items-center pt-1 font-mono-code text-[11px]">
+                                <span className="font-bold text-[#B85D19]">STATUS: {sub.status}</span>
+                                <span className="font-bold">CA MARK: {sub.caMark ? `${sub.caMark}%` : 'PENDING'}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Student Submission Modal */}
+                  {submissionModal && (
+                    <div className="fixed inset-0 bg-[#141413]/80 z-50 flex items-center justify-center p-4">
+                      <div className="bg-[#F4F1EA] border-2 border-[#141413] brutal-shadow max-w-lg w-full p-6">
+                        <div className="border-b-2 border-[#141413] pb-3 mb-4">
+                          <span className="font-mono-code text-xs font-bold uppercase text-[#B85D19]">
+                            LODGE COURSEWORK // {submissionModal.moduleCode}
+                          </span>
+                          <h3 className="font-display font-black text-lg uppercase text-[#141413] mt-0.5">
+                            {submissionModal.title}
+                          </h3>
+                        </div>
+                        <form onSubmit={handleStudentSubmitAssignment} className="space-y-4">
+                          <div>
+                            <label className="block font-mono-code text-xs font-bold uppercase text-[#141413] mb-1">
+                              Document Repository Link & Empirical Abstract
+                            </label>
+                            <textarea
+                              rows={4}
+                              required
+                              placeholder="Enter your Mkoba repository link, scheme-cum-plan reference number, and field summary..."
+                              value={submissionText}
+                              onChange={(e) => setSubmissionText(e.target.value)}
+                              className="w-full p-3 bg-[#FFFFFF] border-2 border-[#141413] font-mono-code text-xs"
+                            />
+                          </div>
+                          <div className="flex justify-end gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setSubmissionModal(null)}
+                              className="px-4 py-2 bg-[#EAE5D9] text-[#141413] border-2 border-[#141413] font-mono-code text-xs font-bold uppercase"
+                            >
+                              CANCEL
+                            </button>
+                            <button
+                              type="submit"
+                              className="px-5 py-2 bg-[#1B4332] text-[#FFFFFF] border-2 border-[#141413] brutal-shadow-sm font-mono-code text-xs font-bold uppercase"
+                            >
+                              TRANSMIT DOCKET
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lecturer CA & Examination Grading Ledger */}
+                  {currentUserProfile.role === 'teacher' && (
+                    <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow overflow-x-auto">
+                      <div className="bg-[#1B4332] text-[#FFFFFF] px-5 py-3 flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#141413]">
+                        <div>
+                          <h3 className="font-display font-black text-base uppercase">
+                            LECTURER CONTINUOUS ASSESSMENT (CA) & EXAM GRADING LEDGER
+                          </h3>
+                          <p className="font-mono-code text-[11px] text-[#EAE5D9]">
+                            UZ SCHEME FORMULA: 40% CA MARK + 60% EXAM MARK = FINAL TRANSCRIPT CLASSIFICATION
+                          </p>
+                        </div>
+                      </div>
+
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-[#EAE5D9] text-[#141413] font-mono-code uppercase border-b-2 border-[#141413]">
+                            <th className="py-3 px-4 border-r border-[#141413]">Candidate</th>
+                            <th className="py-3 px-4 border-r border-[#141413]">Course & Docket</th>
+                            <th className="py-3 px-4 border-r border-[#141413] w-28">CA (40%)</th>
+                            <th className="py-3 px-4 border-r border-[#141413] w-28">Exam (60%)</th>
+                            <th className="py-3 px-4 border-r border-[#141413]">Moderation Remark</th>
+                            <th className="py-3 px-4 text-right">Commit</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y border-[#141413]">
+                          {activeSubmissions.map((sub, i) => {
+                            const currentEdit = gradingEdit[sub.docId] || {};
+                            return (
+                              <tr key={sub.docId || i} className="border-b border-[#141413] hover:bg-[#F4F1EA]">
+                                <td className="py-3 px-4 border-r border-[#141413]">
+                                  <p className="font-bold text-[#141413]">{sub.studentName}</p>
+                                  <p className="font-mono-code text-[11px] text-[#B85D19] font-bold">{sub.studentReg}</p>
+                                </td>
+                                <td className="py-3 px-4 border-r border-[#141413] max-w-xs">
+                                  <span className="font-mono-code font-bold bg-[#141413] text-[#FFFFFF] px-1.5 py-0.5 mr-1.5">
+                                    {sub.moduleCode}
+                                  </span>
+                                  <span className="font-bold">{sub.assignmentTitle}</span>
+                                  <p className="font-mono-code text-[11px] text-[#141413]/70 truncate mt-1">{sub.submissionText}</p>
+                                </td>
+                                <td className="py-3 px-4 border-r border-[#141413]">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    defaultValue={sub.caMark ?? ''}
+                                    onChange={(e) =>
+                                      setGradingEdit({
+                                        ...gradingEdit,
+                                        [sub.docId]: { ...currentEdit, caMark: e.target.value }
+                                      })
+                                    }
+                                    className="w-20 px-2 py-1.5 bg-[#F4F1EA] border-2 border-[#141413] font-mono-code font-bold"
+                                  />
+                                </td>
+                                <td className="py-3 px-4 border-r border-[#141413]">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    defaultValue={sub.examMark ?? ''}
+                                    onChange={(e) =>
+                                      setGradingEdit({
+                                        ...gradingEdit,
+                                        [sub.docId]: { ...currentEdit, examMark: e.target.value }
+                                      })
+                                    }
+                                    className="w-20 px-2 py-1.5 bg-[#F4F1EA] border-2 border-[#141413] font-mono-code font-bold"
+                                  />
+                                </td>
+                                <td className="py-3 px-4 border-r border-[#141413]">
+                                  <input
+                                    type="text"
+                                    defaultValue={sub.feedback ?? ''}
+                                    onChange={(e) =>
+                                      setGradingEdit({
+                                        ...gradingEdit,
+                                        [sub.docId]: { ...currentEdit, feedback: e.target.value }
+                                      })
+                                    }
+                                    className="w-full px-2.5 py-1.5 bg-[#F4F1EA] border-2 border-[#141413] text-xs"
+                                  />
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  <button
+                                    onClick={() => handleSaveGrade(sub)}
+                                    className="px-3 py-1.5 bg-[#1B4332] hover:bg-[#141413] text-[#FFFFFF] font-mono-code font-bold uppercase border border-[#141413]"
+                                  >
+                                    COMMIT
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ==============================================================
+                  4. UNIVERSITY OF ZIMBABWE (UZ) ASSOCIATESHIP GRADING LEDGER
+                 ============================================================== */}
+              {activeTab === 'results' && (
+                <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow">
+                  {/* Official Transcript Header */}
+                  <div className="p-6 border-b-2 border-[#141413] bg-[#EAE5D9] flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <span className="font-mono-code text-xs font-bold uppercase bg-[#1B4332] text-[#FFFFFF] px-2.5 py-0.5">
+                        UNIVERSITY OF ZIMBABWE ASSOCIATESHIP LEDGER // DTE
+                      </span>
+                      <h3 className="font-display text-2xl font-black uppercase text-[#141413] mt-2">
+                        OFFICIAL STATEMENT OF ACADEMIC RESULTS
+                      </h3>
+                      <p className="font-mono-code text-xs text-[#141413] mt-0.5">
+                        CANDIDATE: {currentUserProfile.fullName} • REG NO: {currentUserProfile.regNumber} • INTAKE: {currentUserProfile.intake}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => showNotification(`Exported UZ Transcript Docket for ${currentUserProfile.regNumber}`)}
+                      className="px-4 py-2.5 bg-[#141413] hover:bg-[#B85D19] text-[#FFFFFF] font-mono-code text-xs font-bold uppercase border-2 border-[#141413] flex items-center gap-2 self-start"
+                    >
+                      <Download className="w-4 h-4" strokeWidth={1.75} />
+                      EXPORT TRANSCRIPT DOCKET
+                    </button>
+                  </div>
+
+                  {/* Transcript Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-[#141413] text-[#F4F1EA] font-mono-code uppercase">
+                          <th className="py-3.5 px-4 border-r border-[#F4F1EA]/20">Course Code</th>
+                          <th className="py-3.5 px-4 border-r border-[#F4F1EA]/20">Module Title</th>
+                          <th className="py-3.5 px-4 border-r border-[#F4F1EA]/20">Credits</th>
+                          <th className="py-3.5 px-4 border-r border-[#F4F1EA]/20">CA (40%)</th>
+                          <th className="py-3.5 px-4 border-r border-[#F4F1EA]/20">Exam (60%)</th>
+                          <th className="py-3.5 px-4 border-r border-[#F4F1EA]/20">Final Composite</th>
+                          <th className="py-3.5 px-4 border-r border-[#F4F1EA]/20">UZ Classification</th>
+                          <th className="py-3.5 px-4">Moderator Remark</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y-2 divide-[#141413]">
+                        {INITIAL_MODULES.map((mod) => {
+                          const sub = studentSubmissions.find(s => s.moduleCode === mod.code);
+                          const ca = sub?.caMark ?? 74;
+                          const ex = sub?.examMark ?? 70;
+                          const grade = calculateUZGrade(ca, ex);
+                          return (
+                            <tr key={mod.code} className="hover:bg-[#F4F1EA]">
+                              <td className="py-4 px-4 font-mono-code font-bold text-[#1B4332] border-r border-[#141413]">
+                                {mod.code}
+                              </td>
+                              <td className="py-4 px-4 font-bold text-[#141413] border-r border-[#141413]">
+                                {mod.name}
+                              </td>
+                              <td className="py-4 px-4 font-mono-code border-r border-[#141413]">
+                                {mod.credits} CR
+                              </td>
+                              <td className="py-4 px-4 font-mono-code font-bold border-r border-[#141413]">
+                                {ca}%
+                              </td>
+                              <td className="py-4 px-4 font-mono-code font-bold border-r border-[#141413]">
+                                {ex ? `${ex}%` : 'PENDING'}
+                              </td>
+                              <td className="py-4 px-4 font-mono-code font-black text-sm text-[#141413] border-r border-[#141413]">
+                                {grade.final}
+                              </td>
+                              <td className="py-4 px-4 border-r border-[#141413]">
+                                <span className={`px-2 py-1 font-mono-code text-[11px] font-bold uppercase border border-[#141413] ${grade.badgeBg}`}>
+                                  {grade.classification}
+                                </span>
+                              </td>
+                              <td className="py-4 px-4 text-[#141413]/90">
+                                {sub?.feedback || 'Coursework verified by Internal Board of Examiners.'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ==============================================================
+                  5. GWERU CAMPUS TIMETABLE & OFFICIAL CIRCULARS
+                 ============================================================== */}
+              {activeTab === 'timetable' && (
+                <div className="space-y-8">
+                  <div className="grid lg:grid-cols-12 gap-6 items-start">
+                    {/* 8-Column Master Venue Schedule */}
+                    <div className="lg:col-span-8 bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow">
+                      <div className="bg-[#1B4332] text-[#FFFFFF] px-5 py-3.5 border-b-2 border-[#141413] flex items-center justify-between">
+                        <h3 className="font-display font-black text-base uppercase">
+                          GWERU CAMPUS MASTER LECTURE & PRACTICUM SCHEDULE
+                        </h3>
+                        <span className="font-mono-code text-xs">TERM 3 // 2026</span>
+                      </div>
+
+                      <div className="divide-y-2 divide-[#141413]">
+                        {activeTimetable.map((slot, index) => (
+                          <div key={slot.docId || index} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#F4F1EA]">
+                            <div className="flex items-start gap-3">
+                              <div className="w-28 shrink-0 bg-[#141413] text-[#F4F1EA] font-mono-code text-xs font-bold p-2 text-center uppercase">
+                                {slot.day}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2 font-mono-code text-xs font-bold">
+                                  <span className="text-[#B85D19]">{slot.moduleCode}</span>
+                                  <span>•</span>
+                                  <span>{slot.time}</span>
+                                </div>
+                                <h4 className="font-display font-black text-base uppercase text-[#141413] mt-0.5">
+                                  {slot.venue}
+                                </h4>
+                                <p className="font-mono-code text-xs text-[#141413]/70">
+                                  LECTURER: {slot.lecturer} // COHORT: {slot.group}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 4-Column Circular Publisher / Notice Feed */}
+                    <div className="lg:col-span-4 space-y-6">
+                      {(currentUserProfile.role === 'teacher' || currentUserProfile.role === 'admin') && (
+                        <div className="bg-[#EAE5D9] border-2 border-[#141413] brutal-shadow p-5">
+                          <h3 className="font-display font-black text-sm uppercase border-b-2 border-[#141413] pb-2 mb-3">
+                            DISPATCH OFFICIAL CIRCULAR
+                          </h3>
+                          <form onSubmit={handlePostAnnouncement} className="space-y-3 text-xs">
+                            <input
+                              type="text"
+                              required
+                              placeholder="Circular Headline..."
+                              value={noticeForm.title}
+                              onChange={(e) => setNoticeForm({ ...noticeForm, title: e.target.value })}
+                              className="w-full px-3 py-2 bg-[#FFFFFF] border-2 border-[#141413]"
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                              <select
+                                value={noticeForm.category}
+                                onChange={(e) => setNoticeForm({ ...noticeForm, category: e.target.value })}
+                                className="px-2 py-2 bg-[#FFFFFF] border-2 border-[#141413] font-mono-code text-[11px] font-bold"
+                              >
+                                <option>ACADEMIC REGISTRY</option>
+                                <option>TEACHING PRACTICE</option>
+                                <option>BURSARY & REGISTRY</option>
+                              </select>
+                              <select
+                                value={noticeForm.priority}
+                                onChange={(e) => setNoticeForm({ ...noticeForm, priority: e.target.value })}
+                                className="px-2 py-2 bg-[#FFFFFF] border-2 border-[#141413] font-mono-code text-[11px] font-bold"
+                              >
+                                <option>STANDARD</option>
+                                <option>URGENT</option>
+                                <option>MANDATORY</option>
+                              </select>
+                            </div>
+                            <textarea
+                              rows={3}
+                              required
+                              placeholder="Full circular text..."
+                              value={noticeForm.body}
+                              onChange={(e) => setNoticeForm({ ...noticeForm, body: e.target.value })}
+                              className="w-full p-2.5 bg-[#FFFFFF] border-2 border-[#141413]"
+                            />
+                            <button
+                              type="submit"
+                              className="w-full py-2.5 bg-[#B85D19] hover:bg-[#141413] text-[#FFFFFF] font-mono-code font-bold uppercase border-2 border-[#141413] brutal-shadow-sm transition"
+                            >
+                              PUBLISH CIRCULAR
+                            </button>
+                          </form>
+                        </div>
+                      )}
+
+                      <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow p-5 space-y-3">
+                        <h3 className="font-display font-black text-sm uppercase border-b-2 border-[#141413] pb-2">
+                          GAZETTE ARCHIVE
+                        </h3>
+                        {activeAnnouncements.map((an, i) => (
+                          <div key={an.docId || i} className="p-3 bg-[#F4F1EA] border border-[#141413] space-y-1 text-xs">
+                            <span className="font-mono-code text-[10px] font-bold text-[#B85D19] block">
+                              {an.date} // {an.category}
+                            </span>
+                            <p className="font-bold text-[#141413] uppercase">{an.title}</p>
+                            <p className="text-[11px] text-[#141413]/80">{an.body}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ==============================================================
+                  6. STUDENT FEES, ZIG/USD LEDGER & EXAM CLEARANCE
+                 ============================================================== */}
+              {activeTab === 'fees' && (
+                <div className="space-y-8">
+                  {currentUserProfile.role === 'student' ? (
+                    <div className="grid lg:grid-cols-12 gap-6 items-start">
+                      {/* Left 7-Column Physical Bursar Receipt Ledger & Payment Form */}
+                      <div className="lg:col-span-7 space-y-6">
+                        <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow p-6">
+                          <h3 className="font-display font-black text-base uppercase border-b-2 border-[#141413] pb-2 mb-4 flex items-center gap-2">
+                            <CreditCard className="w-5 h-5 text-[#1B4332]" strokeWidth={1.75} />
+                            LOG CBZ / ZB BANK TUITION VOUCHER (USD OR ZIG)
+                          </h3>
+                          <form onSubmit={handleStudentPayment} className="grid sm:grid-cols-3 gap-4 text-xs">
+                            <div>
+                              <label className="block font-mono-code font-bold uppercase mb-1">Amount Paid (USD)</label>
+                              <input
+                                type="number"
+                                required
+                                min="1"
+                                placeholder="e.g. 90"
+                                value={paymentForm.amountUSD}
+                                onChange={(e) => setPaymentForm({ ...paymentForm, amountUSD: e.target.value })}
+                                className="w-full px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] font-mono-code font-bold"
+                              />
+                            </div>
+                            <div>
+                              <label className="block font-mono-code font-bold uppercase mb-1">Bank Channel</label>
+                              <select
+                                value={paymentForm.currencyUsed}
+                                onChange={(e) => setPaymentForm({ ...paymentForm, currencyUsed: e.target.value })}
+                                className="w-full px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] font-mono-code font-bold"
+                              >
+                                <option>ZB Bank Gweru Branch (USD Cash Deposit)</option>
+                                <option>CBZ Bank Transfer (ZiG Interbank Equivalent)</option>
+                                <option>EcoCash USD Merchant 449102</option>
+                                <option>Mkoba Bursary Cash Office</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block font-mono-code font-bold uppercase mb-1">Bank Voucher Ref</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="ZB-GWR-994120"
+                                value={paymentForm.reference}
+                                onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
+                                className="w-full px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] font-mono-code uppercase"
+                              />
+                            </div>
+                            <div className="sm:col-span-3">
+                              <button
+                                type="submit"
+                                className="w-full py-3 bg-[#1B4332] hover:bg-[#141413] text-[#FFFFFF] font-mono-code font-bold uppercase border-2 border-[#141413] brutal-shadow-sm transition"
+                              >
+                                COMMIT VOUCHER & RECALCULATE CLEARANCE STATUS
+                              </button>
+                            </div>
+                          </form>
+                        </div>
+
+                        {/* Verified Bursar Receipt Vouchers */}
+                        <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow">
+                          <div className="bg-[#141413] text-[#F4F1EA] px-5 py-3 flex items-center justify-between">
+                            <h4 className="font-display font-black text-sm uppercase">
+                              VERIFIED BURSARY RECEIPT LEDGER
+                            </h4>
+                            <span className="font-mono-code text-xs text-[#B85D19]">1 USD = 26.50 ZiG</span>
+                          </div>
+                          <div className="divide-y-2 divide-[#141413]">
+                            {studentPayments.map((p, idx) => (
+                              <div key={p.docId || idx} className="p-4 flex items-center justify-between font-mono-code text-xs">
+                                <div>
+                                  <span className="font-bold text-sm text-[#141413] block">
+                                    ${p.amountUSD}.00 USD // {p.amountZiG || Math.round(p.amountUSD * 26.5)} ZiG
+                                  </span>
+                                  <span className="text-[#141413]/80 block">{p.currencyUsed}</span>
+                                  <span className="text-[11px] text-[#B85D19] font-bold">
+                                    VOUCHER: {p.reference} • DATE: {p.date}
+                                  </span>
+                                </div>
+                                <span className="px-2.5 py-1 bg-[#1B4332] text-[#FFFFFF] font-bold uppercase">
+                                  {p.status}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right 5-Column Financial Summary & Clearance Certificate */}
+                      <div className="lg:col-span-5 bg-[#EAE5D9] border-2 border-[#141413] brutal-shadow p-6 space-y-4">
+                        <div className="border-b-2 border-[#141413] pb-3">
+                          <span className="font-mono-code text-xs font-bold uppercase text-[#B85D19]">
+                            BURSARY STATEMENT // 17 OCT 2026
+                          </span>
+                          <h3 className="font-display font-black text-xl uppercase text-[#141413]">
+                            ACCOUNT: {currentUserProfile.regNumber}
+                          </h3>
+                        </div>
+
+                        <div className="space-y-3 font-mono-code text-xs bg-[#FFFFFF] border-2 border-[#141413] p-4">
+                          <div className="flex justify-between">
+                            <span>TERM 3 BILLED TUITION:</span>
+                            <span className="font-bold">$450.00 USD (11,925 ZiG)</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>OUTSTANDING ARREARS:</span>
+                            <span className="font-bold text-[#8C2D19]">
+                              ${currentUserProfile.feeBalanceUSD ?? 90}.00 USD ({Math.round((currentUserProfile.feeBalanceUSD ?? 90) * 26.5)} ZiG)
+                            </span>
+                          </div>
+                          <div className="flex justify-between border-t border-[#141413] pt-2">
+                            <span>EXAMINATION PERMIT:</span>
+                            <span className={`font-bold ${currentUserProfile.examCleared ? 'text-[#1B4332]' : 'text-[#8C2D19]'}`}>
+                              {currentUserProfile.examCleared ? 'CLEARED FOR SITTING' : 'HOLD (PAY ARREARS)'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Registrar / Bursar Master Clearance Ledger */
+                    <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow overflow-x-auto">
+                      <div className="bg-[#141413] text-[#F4F1EA] px-5 py-3.5 flex items-center justify-between">
+                        <h3 className="font-display font-black text-base uppercase">
+                          BURSARY MASTER CONTROL: CANDIDATE ARREARS & EXAM CLEARANCE
+                        </h3>
+                        <span className="font-mono-code text-xs text-[#B85D19]">GWERU BURSARY OFFICE</span>
+                      </div>
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-[#EAE5D9] font-mono-code uppercase border-b-2 border-[#141413]">
+                            <th className="py-3 px-4 border-r border-[#141413]">Candidate</th>
+                            <th className="py-3 px-4 border-r border-[#141413]">Reg Number</th>
+                            <th className="py-3 px-4 border-r border-[#141413]">Department</th>
+                            <th className="py-3 px-4 border-r border-[#141413]">Arrears (USD / ZiG)</th>
+                            <th className="py-3 px-4 border-r border-[#141413]">Permit Status</th>
+                            <th className="py-3 px-4 text-right">Bursar Override</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y border-[#141413]">
+                          {allStudents.map((stu) => (
+                            <tr key={stu.id || stu.docId} className="border-b border-[#141413]">
+                              <td className="py-3 px-4 font-bold border-r border-[#141413]">{stu.fullName}</td>
+                              <td className="py-3 px-4 font-mono-code font-bold border-r border-[#141413]">{stu.regNumber}</td>
+                              <td className="py-3 px-4 border-r border-[#141413]">{stu.department}</td>
+                              <td className="py-3 px-4 font-mono-code font-bold text-[#8C2D19] border-r border-[#141413]">
+                                ${stu.feeBalanceUSD ?? 0} USD ({Math.round((stu.feeBalanceUSD ?? 0) * 26.5)} ZiG)
+                              </td>
+                              <td className="py-3 px-4 border-r border-[#141413]">
+                                <span className={`px-2 py-1 font-mono-code font-bold uppercase ${
+                                  stu.examCleared ? 'bg-[#1B4332] text-[#FFFFFF]' : 'bg-[#8C2D19] text-[#FFFFFF]'
+                                }`}>
+                                  {stu.examCleared ? 'CLEARED' : 'BLOCKED'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <button
+                                  onClick={() => handleToggleClearance(stu)}
+                                  className="px-3 py-1.5 bg-[#141413] hover:bg-[#B85D19] text-[#FFFFFF] font-mono-code font-bold uppercase"
+                                >
+                                  TOGGLE PERMIT
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ==============================================================
+                  7. LECTURE ROLL-CALL & ATTENDANCE REGISTER
+                 ============================================================== */}
+              {activeTab === 'attendance' && (
+                <div className="space-y-6">
+                  {currentUserProfile.role === 'teacher' ? (
+                    <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow p-6 space-y-6">
+                      <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-[#141413] pb-4">
+                        <div>
+                          <h3 className="font-display font-black text-lg uppercase text-[#141413]">
+                            LECTURE ROLL-CALL & TP SUPERVISION REGISTER
+                          </h3>
+                          <p className="font-mono-code text-xs text-[#141413]/70">
+                            85% MINIMUM ATTENDANCE MANDATED FOR UNIVERSITY OF ZIMBABWE EXAM SITTING
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 font-mono-code text-xs">
+                          <select
+                            value={attendanceModule}
+                            onChange={(e) => setAttendanceModule(e.target.value)}
+                            className="px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] font-bold"
+                          >
+                            {INITIAL_MODULES.map(m => (
+                              <option key={m.code} value={m.code}>{m.code}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={attendanceVenue}
+                            onChange={(e) => setAttendanceVenue(e.target.value)}
+                            className="px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] font-bold"
+                          >
+                            <option>Main Lecture Theatre (MLT)</option>
+                            <option>Batanai Hall</option>
+                            <option>Science Lab B2</option>
+                            <option>Mkoba 6 High School TP Placement</option>
+                          </select>
+                          <input
+                            type="date"
+                            value={attendanceDate}
+                            onChange={(e) => setAttendanceDate(e.target.value)}
+                            className="px-3 py-2 bg-[#F4F1EA] border-2 border-[#141413] font-bold"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="divide-y-2 divide-[#141413] border-2 border-[#141413]">
+                        {allStudents.map((stu) => (
+                          <div key={stu.id || stu.docId} className="p-4 flex flex-wrap items-center justify-between gap-4 bg-[#F4F1EA]">
+                            <div>
+                              <p className="font-display font-black text-base uppercase text-[#141413]">{stu.fullName}</p>
+                              <p className="font-mono-code text-xs text-[#141413]/80">
+                                {stu.regNumber} • {stu.department} • {stu.tpSchool || 'Gweru Campus'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 font-mono-code text-xs">
+                              <button
+                                onClick={() => handleMarkAttendance(stu, 'PRESENT')}
+                                className="px-3 py-1.5 bg-[#1B4332] text-[#FFFFFF] font-bold uppercase border border-[#141413]"
+                              >
+                                PRESENT
+                              </button>
+                              <button
+                                onClick={() => handleMarkAttendance(stu, 'LATE')}
+                                className="px-3 py-1.5 bg-[#B85D19] text-[#FFFFFF] font-bold uppercase border border-[#141413]"
+                              >
+                                LATE
+                              </button>
+                              <button
+                                onClick={() => handleMarkAttendance(stu, 'ABSENT')}
+                                className="px-3 py-1.5 bg-[#8C2D19] text-[#FFFFFF] font-bold uppercase border border-[#141413]"
+                              >
+                                ABSENT
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow">
+                      <div className="bg-[#141413] text-[#F4F1EA] px-5 py-3.5 flex items-center justify-between">
+                        <h3 className="font-display font-black text-base uppercase">
+                          CANDIDATE ROLL-CALL REGISTER ({currentUserProfile.regNumber})
+                        </h3>
+                        <span className="font-mono-code text-xs text-[#B85D19] font-bold">
+                          CUMULATIVE RATE: {attendanceRate}%
+                        </span>
+                      </div>
+                      <div className="divide-y-2 divide-[#141413]">
+                        {studentAttendance.map((rec, i) => (
+                          <div key={rec.docId || i} className="p-4 flex items-center justify-between font-mono-code text-xs">
+                            <div>
+                              <span className="font-bold text-[#1B4332] mr-3">{rec.moduleCode}</span>
+                              <span className="font-bold text-[#141413]">{rec.venue || 'Main Lecture Theatre (MLT)'}</span>
+                              <span className="block text-[11px] text-[#141413]/70 mt-0.5">
+                                DATE: {rec.date} • LOGGED BY: {rec.recordedBy}
+                              </span>
+                            </div>
+                            <span className={`px-2.5 py-1 font-bold uppercase border border-[#141413] ${
+                              rec.status === 'PRESENT'
+                                ? 'bg-[#1B4332] text-[#FFFFFF]'
+                                : rec.status === 'LATE'
+                                ? 'bg-[#B85D19] text-[#FFFFFF]'
+                                : 'bg-[#8C2D19] text-[#FFFFFF]'
+                            }`}>
+                              {rec.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ==============================================================
+                  8. DIRECT MESSAGING & ACADEMIC CORRESPONDENCE
+                 ============================================================== */}
+              {activeTab === 'messages' && (
+                <div className="grid lg:grid-cols-12 gap-6 items-start">
+                  {/* 5-Column Dispatch Form */}
+                  <div className="lg:col-span-5 bg-[#EAE5D9] border-2 border-[#141413] brutal-shadow p-5">
+                    <h3 className="font-display font-black text-base uppercase border-b-2 border-[#141413] pb-2 mb-4 flex items-center gap-2">
+                      <Send className="w-4 h-4 text-[#1B4332]" strokeWidth={1.75} />
+                      TRANSMIT ACADEMIC DISPATCH
+                    </h3>
+                    <form onSubmit={handleSendMessage} className="space-y-3 text-xs">
+                      <div>
+                        <label className="block font-mono-code font-bold uppercase mb-1">Course Code</label>
+                        <select
+                          value={msgForm.moduleCode}
+                          onChange={(e) => setMsgForm({ ...msgForm, moduleCode: e.target.value })}
+                          className="w-full px-3 py-2 bg-[#FFFFFF] border-2 border-[#141413] font-mono-code font-bold"
+                        >
+                          {INITIAL_MODULES.map(m => (
+                            <option key={m.code} value={m.code}>{m.code} // {m.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block font-mono-code font-bold uppercase mb-1">Recipient</label>
+                        <input
+                          type="text"
+                          value={msgForm.recipientName}
+                          onChange={(e) => setMsgForm({ ...msgForm, recipientName: e.target.value })}
+                          className="w-full px-3 py-2 bg-[#FFFFFF] border-2 border-[#141413] font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-mono-code font-bold uppercase mb-1">Subject Docket</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="TP-300 Supervision Slot at Mkoba 6 High"
+                          value={msgForm.subject}
+                          onChange={(e) => setMsgForm({ ...msgForm, subject: e.target.value })}
+                          className="w-full px-3 py-2 bg-[#FFFFFF] border-2 border-[#141413]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-mono-code font-bold uppercase mb-1">Message Body</label>
+                        <textarea
+                          rows={4}
+                          required
+                          placeholder="Enter formal inquiry..."
+                          value={msgForm.text}
+                          onChange={(e) => setMsgForm({ ...msgForm, text: e.target.value })}
+                          className="w-full p-2.5 bg-[#FFFFFF] border-2 border-[#141413]"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="w-full py-2.5 bg-[#1B4332] hover:bg-[#141413] text-[#FFFFFF] font-mono-code font-bold uppercase border-2 border-[#141413] brutal-shadow-sm transition"
+                      >
+                        TRANSMIT DISPATCH
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* 7-Column Correspondence Ledger */}
+                  <div className="lg:col-span-7 bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow">
+                    <div className="bg-[#141413] text-[#F4F1EA] px-5 py-3 flex items-center justify-between">
+                      <h3 className="font-display font-black text-sm uppercase">
+                        ACADEMIC CORRESPONDENCE LOG [{activeMessages.length}]
+                      </h3>
+                      <span className="font-mono-code text-xs text-[#B85D19]">THREADED LEDGER</span>
+                    </div>
+                    <div className="divide-y-2 divide-[#141413]">
+                      {activeMessages.map((m, idx) => (
+                        <div key={m.docId || idx} className="p-5 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2 font-mono-code text-xs">
+                            <span className="bg-[#1B4332] text-[#FFFFFF] font-bold px-2 py-0.5">
+                              {m.moduleCode} // {m.subject}
+                            </span>
+                            <span className="text-[#141413]/70">{m.timestamp}</span>
+                          </div>
+                          <p className="text-xs text-[#141413] leading-relaxed">
+                            <strong className="font-mono-code uppercase">{m.senderName} [{m.senderReg}]:</strong> {m.text}
+                          </p>
+
+                          {m.reply ? (
+                            <div className="p-3 bg-[#EAE5D9] border-l-4 border-[#1B4332] text-xs font-mono-code text-[#141413]">
+                              <strong className="uppercase text-[#1B4332] block mb-0.5">OFFICIAL LECTURER RESPONSE:</strong>
+                              {m.reply}
+                            </div>
+                          ) : (
+                            currentUserProfile.role === 'teacher' && (
+                              <div className="flex gap-2 pt-2">
+                                <input
+                                  type="text"
+                                  placeholder="Enter official lecturer response..."
+                                  value={replyTexts[m.docId] || ''}
+                                  onChange={(e) => setReplyTexts({ ...replyTexts, [m.docId]: e.target.value })}
+                                  className="flex-1 px-3 py-1.5 bg-[#F4F1EA] border-2 border-[#141413] text-xs"
+                                />
+                                <button
+                                  onClick={() => handleSendReply(m)}
+                                  className="px-4 py-1.5 bg-[#B85D19] text-[#FFFFFF] font-mono-code text-xs font-bold uppercase border-2 border-[#141413]"
+                                >
+                                  APPEND REPLY
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ==============================================================
+                  9. ADMIN REGISTRY DIRECTORY
+                 ============================================================== */}
+              {activeTab === 'users' && currentUserProfile.role === 'admin' && (
+                <div className="bg-[#FFFFFF] border-2 border-[#141413] brutal-shadow overflow-x-auto">
+                  <div className="bg-[#141413] text-[#F4F1EA] px-5 py-3.5 flex items-center justify-between">
+                    <h3 className="font-display font-black text-base uppercase">
+                      MKOBA TEACHERS COLLEGE MASTER REGISTRY DIRECTORY
+                    </h3>
+                    <span className="font-mono-code text-xs text-[#B85D19]">RBAC PERMISSION TABLE</span>
+                  </div>
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-[#EAE5D9] font-mono-code uppercase border-b-2 border-[#141413]">
+                        <th className="py-3 px-4 border-r border-[#141413]">Full Name</th>
+                        <th className="py-3 px-4 border-r border-[#141413]">Reg / Staff ID</th>
+                        <th className="py-3 px-4 border-r border-[#141413]">Email</th>
+                        <th className="py-3 px-4 border-r border-[#141413]">Department</th>
+                        <th className="py-3 px-4 border-r border-[#141413]">Role</th>
+                        <th className="py-3 px-4 text-right">Modify Classification</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y border-[#141413]">
+                      {activeUsers.map((u) => (
+                        <tr key={u.id || u.docId} className="border-b border-[#141413] hover:bg-[#F4F1EA]">
+                          <td className="py-3 px-4 font-bold border-r border-[#141413]">{u.fullName}</td>
+                          <td className="py-3 px-4 font-mono-code font-bold border-r border-[#141413]">{u.regNumber}</td>
+                          <td className="py-3 px-4 font-mono-code border-r border-[#141413]">{u.email}</td>
+                          <td className="py-3 px-4 border-r border-[#141413]">{u.department}</td>
+                          <td className="py-3 px-4 border-r border-[#141413]">
+                            <span className="px-2 py-0.5 bg-[#1B4332] text-[#FFFFFF] font-mono-code font-bold uppercase">
+                              {u.role}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <select
+                              value={u.role}
+                              onChange={(e) => handleChangeUserRole(u, e.target.value)}
+                              className="px-2.5 py-1 bg-[#F4F1EA] border-2 border-[#141413] font-mono-code font-bold uppercase"
+                            >
+                              <option value="student">STUDENT</option>
+                              <option value="teacher">TEACHER</option>
+                              <option value="admin">ADMIN</option>
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </main>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
